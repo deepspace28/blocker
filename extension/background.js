@@ -39,6 +39,16 @@ async function refreshRules() {
     let id = RULE_ID_BASE;
 
     if (status.mode === 'allow') {
+      // Always keep FocusLock's own local status port reachable — otherwise
+      // "Lock the Internet" also blocks its own status page. Scoped to the
+      // exact port (not all of 127.0.0.1) so it doesn't exempt other local
+      // dev servers the user might be running.
+      addRules.push({
+        id: id++,
+        priority: 2,
+        action: { type: 'allow' },
+        condition: { urlFilter: '127.0.0.1:38219', resourceTypes: ['main_frame'] },
+      });
       for (const domain of status.domains) {
         addRules.push({
           id: id++,
