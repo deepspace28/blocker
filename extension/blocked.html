@@ -1,0 +1,54 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<title>You are free</title>
+<style>
+  html, body {
+    height: 100%;
+    margin: 0;
+  }
+  body {
+    background: linear-gradient(160deg, #1c7a43, #2fae66);
+    color: #ffffff;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    height: 100vh;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  }
+  .wrap {
+    text-align: center;
+    padding: 24px;
+  }
+  .butterfly {
+    font-size: 96px;
+    line-height: 1;
+    margin-bottom: 24px;
+    animation: flutter 3s ease-in-out infinite;
+  }
+  h1 {
+    font-size: 28px;
+    font-weight: 700;
+    margin: 0;
+    letter-spacing: 0.3px;
+  }
+  p {
+    margin-top: 12px;
+    font-size: 14px;
+    color: rgba(255, 255, 255, 0.85);
+  }
+  @keyframes flutter {
+    0%, 100% { transform: translateY(0) rotate(-4deg); }
+    50% { transform: translateY(-10px) rotate(4deg); }
+  }
+</style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="butterfly">🦋</div>
+    <h1>You are free from your loop</h1>
+    <p>FocusLock is protecting your session.</p>
+  </div>
+</body>
+</html>

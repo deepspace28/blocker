@@ -17,8 +17,7 @@
     "electron-builder": "^25.1.8"
   },
   "dependencies": {
-    "electron-store": "^8.2.0",
-    "sudo-prompt": "^9.2.1"
+    "electron-store": "^8.2.0"
   },
   "build": {
     "appId": "com.focuslock.app",
@@ -27,8 +26,14 @@
       "src/**/*",
       "assets/**/*"
     ],
-    "mac": { "category": "public.app-category.productivity" },
-    "win": { "target": "nsis" },
-    "linux": { "target": "AppImage" }
+    "mac": {
+      "category": "public.app-category.productivity"
+    },
+    "win": {
+      "target": "nsis"
+    },
+    "linux": {
+      "target": "AppImage"
+    }
   }
 }

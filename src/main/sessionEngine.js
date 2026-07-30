@@ -1,14 +1,16 @@
 const { EventEmitter } = require('events');
 const crypto = require('crypto');
 const store = require('./store');
-const hostsBlocker = require('./hostsBlocker');
-const proxyBlocker = require('./proxyBlocker');
-const systemProxy = require('./systemProxy');
 const appBlocker = require('./appBlocker');
 
 const TICK_MS = 15000;
 const APP_ENFORCE_MS = 4000;
 
+// Actual site-blocking enforcement lives in the browser extension (see
+// extension/), which polls this app's local status API and redirects
+// blocked navigations to its own block page. This engine just owns the
+// session's state (start/end/mode/domains/hard-mode) and native app
+// killing, which needs no admin permission and no browser involvement.
 class SessionEngine extends EventEmitter {
   constructor() {
     super();
@@ -68,16 +70,7 @@ class SessionEngine extends EventEmitter {
       mode,
       domains,
       apps,
-      proxyContext: null,
     };
-
-    if (mode === 'allow') {
-      proxyBlocker.setAllowlist(domains);
-      proxyBlocker.startProxyServer();
-      session.proxyContext = await systemProxy.enable(proxyBlocker.PROXY_PORT);
-    } else {
-      await hostsBlocker.applyBlock(domains);
-    }
 
     store.set('activeSession', session);
     this._startAppEnforcement(session.apps);
@@ -100,22 +93,8 @@ class SessionEngine extends EventEmitter {
     return { stopped: true };
   }
 
-  async _teardownEnforcement(session) {
-    this._stopAppEnforcement();
-    if (session.mode === 'allow') {
-      try {
-        await systemProxy.disable(session.proxyContext);
-      } catch (_) {
-        /* best effort */
-      }
-      proxyBlocker.stopProxyServer();
-    } else {
-      await hostsBlocker.removeBlock();
-    }
-  }
-
   async _endSession(session, { endedEarly }) {
-    await this._teardownEnforcement(session);
+    this._stopAppEnforcement();
     store.set('activeSession', null);
 
     const history = store.get('history');
@@ -230,42 +209,17 @@ class SessionEngine extends EventEmitter {
 
   /**
    * Called once at app launch. If a session was active when the app last
-   * closed (or the machine restarted), re-assert the block and keep the
-   * countdown going — this is what makes hard mode survive a restart.
+   * closed (or the machine restarted), resume it — the browser extension
+   * will pick the still-active session back up on its next status poll,
+   * which is what makes hard mode survive a restart.
    */
   async restoreOnLaunch() {
     const session = store.get('activeSession');
-    if (!session) {
-      // Defensive: if hosts file still has our managed block but we have no
-      // record of an active session (e.g. store was cleared), clean it up.
-      if (hostsBlocker.isCurrentlyBlocked()) {
-        try {
-          await hostsBlocker.removeBlock();
-        } catch (_) {
-          /* ignore */
-        }
-      }
-      return;
-    }
+    if (!session) return;
 
     if (Date.now() >= session.endTime) {
       await this._endSession(session, { endedEarly: false });
       return;
-    }
-
-    try {
-      if (session.mode === 'allow') {
-        proxyBlocker.setAllowlist(session.domains);
-        proxyBlocker.startProxyServer();
-        session.proxyContext = await systemProxy.enable(proxyBlocker.PROXY_PORT);
-        store.set('activeSession', session);
-      } else {
-        await hostsBlocker.applyBlock(session.domains);
-      }
-    } catch (_) {
-      // If we can't re-assert on launch (e.g. no active network service
-      // found yet), the previous state may already still be in effect, so
-      // this is non-fatal; the session record itself is preserved either way.
     }
 
     this._startAppEnforcement(session.apps);

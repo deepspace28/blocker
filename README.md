@@ -4,6 +4,42 @@ A personal distraction blocker for your desktop, inspired by Freedom. Block dist
 websites and apps for a set duration, invert it into an allowlist with "Lock the Internet,"
 set recurring schedules, and use hard mode when you don't trust yourself with an "off" switch.
 
+## Two pieces
+
+- **The desktop app** (this repo's `src/`) — your control panel: blocklist, allowlist, blocked
+  apps, sessions, schedules, stats. No admin/root permission is ever required to run it or use
+  it. It also force-closes any native apps you've blocked (e.g. Discord, Steam), which likewise
+  needs no elevation.
+- **The browser extension** (`extension/`) — actually enforces website blocking, inside whichever
+  browser it's installed in. When you try to visit a blocked site, it redirects you to a full-page
+  "You are free from your loop" screen instead of the site.
+
+The desktop app runs a tiny read-only status API on `127.0.0.1:38219` that only your own machine
+can reach; the extension polls it every ~30 seconds and turns the current session into browser
+blocking rules. Neither side needs a password, an admin prompt, or a hosts-file edit — this is
+the deliberate replacement for the earlier version, which used a hosts-file/sudo-prompt approach
+that popped an OS permission dialog on every session start/stop.
+
+**Trade-off worth knowing:** since blocking now happens inside the browser rather than at the OS
+network level, it only covers browsers that have the extension installed — not other browsers, not
+non-browser apps that hit the network directly. If you want a specific browser blocked, install the
+extension there.
+
+## Installing the browser extension
+
+This isn't published to the Chrome Web Store (that requires a developer account and review), so
+you load it as an "unpacked" extension — takes under a minute:
+
+1. Open `chrome://extensions` (or `edge://extensions` for Edge, `brave://extensions` for Brave —
+   any Chromium-based browser works).
+2. Turn on **Developer mode** (top-right toggle).
+3. Click **Load unpacked** and select this repo's `extension/` folder.
+4. Done. It'll show "FocusLock Blocker" in your extensions list and start polling the desktop app
+   automatically.
+
+(Firefox isn't supported yet — its Manifest V3 `declarativeNetRequest` support differs enough
+that it'd need a separate build.)
+
 ## Features
 
 - **Blocklist** — maintain a list of sites (social media, news, etc.) to block during sessions,
@@ -15,48 +51,40 @@ set recurring schedules, and use hard mode when you don't trust yourself with an
   during any session, regardless of mode.
 - **Focus sessions** — start a timed session (e.g. 25 minutes, 2 hours) in either mode.
 - **Hard mode** — once a hard-mode session starts, it can't be stopped early, even if you quit
-  or restart the app. The block is re-applied automatically on launch until the timer runs out.
+  or restart the app. As long as the FocusLock app is running in the background (it minimizes to
+  the tray instead of quitting during hard mode), the extension keeps seeing the session as
+  active and keeps enforcing it.
 - **Recurring schedules** — e.g. "block social media Mon-Fri 9am-5pm" — auto-starts (and can be
   hard-mode, and can be either block or allow mode) whenever FocusLock is running.
 - **Stats & history** — sessions completed, total time blocked, and a day streak.
 
 ## How blocking works
 
-**Block mode** redirects each domain on your blocklist to `127.0.0.1` inside a clearly marked,
-managed section of your OS hosts file (`/etc/hosts` on macOS/Linux, `System32\drivers\etc\hosts`
-on Windows). Editing the hosts file requires admin privileges, so the app will prompt you for
-your password (via Touch ID/Keychain on macOS, UAC on Windows, or polkit on Linux) the first
-time you start or stop a session.
+The extension computes Chrome's `declarativeNetRequest` rules from whatever the desktop app's
+status API currently reports:
+- **Block mode**: a redirect-to-`blocked.html` rule for every domain on your blocklist.
+- **Allow mode ("Lock the Internet")**: an `allow` rule (higher priority) for every domain on
+  your allowlist, plus a catch-all redirect rule for everything else.
 
-**Allow mode ("Lock the Internet")** works differently, because a hosts file can only redirect
-specific names — it can't express "block everything except X." Instead, FocusLock runs a small
-local proxy and points your OS's system network proxy at it for the session; the proxy only
-forwards traffic to hosts on your allowlist (including HTTPS, via CONNECT tunneling — it only
-ever inspects the hostname, never your encrypted traffic) and returns a block page or connection
-refusal for everything else. No admin password is needed for this mode (it's a per-user network
-setting), but **platform coverage varies**:
-- macOS: works via `networksetup` on your active network service.
-- Windows: works via the per-user WinINet proxy registry keys.
-- Linux: only covers GNOME's system proxy setting (`gsettings`) — other desktop environments, and
-  browsers with their own independent proxy setting (e.g. Firefox unless set to "use system
-  proxy"), aren't covered.
+If the extension can't reach the status API (e.g. the FocusLock app isn't running), it leaves
+whatever rules were already in place rather than clearing them — so a brief app hiccup doesn't
+silently lift a block.
 
 **App blocking** periodically lists running processes (`tasklist`/`ps`) and force-kills any whose
 executable name matches an entry in your blocked-apps list — checked every few seconds, so a
 relaunch gets closed again almost immediately.
 
 **Limitation:** like most lightweight blockers (including Freedom itself), none of this stops
-someone with admin access and technical know-how from manually editing the hosts file, changing
-network settings back, or using a VPN outside the proxy. The friction is the point — this is
-meant to block casual "just checking Twitter for a second," not a determined adversary.
+someone with real technical know-how from disabling the extension, using a different browser, or
+force-quitting the FocusLock app process via Task Manager/Activity Monitor. The friction is the
+point — this is meant to block casual "just checking Twitter for a second," not a determined
+adversary.
 
 ## Not included (yet)
 
 - Cross-device sync / mobile apps — would need a hosted backend and account system.
-- A browser extension companion.
-- Freedom's "Pace" soft-friction delay screen — the current hosts-file/proxy architecture doesn't
-  cleanly support showing an interstitial over HTTPS without a MITM proxy with a locally-trusted
-  certificate, which is a much bigger trust/security trade-off than the rest of this app.
+- Firefox/Safari extension builds.
+- Freedom's "Pace" soft-friction delay screen.
 
 ## Running it
 
@@ -64,6 +92,8 @@ meant to block casual "just checking Twitter for a second," not a determined adv
 npm install
 npm start
 ```
+
+Then install the browser extension (see above) so blocking actually takes effect.
 
 ## Building installers
 
@@ -80,13 +110,15 @@ src/
   main/         Electron main process
     main.js             app lifecycle, window, tray, IPC handlers
     store.js             persisted JSON store (electron-store)
-    hostsBlocker.js       hosts-file read/write + elevation (block mode)
-    proxyBlocker.js       local CONNECT-capable proxy (allow mode / "Lock the Internet")
-    systemProxy.js        OS system-proxy toggling per platform
+    statusServer.js       localhost-only read API the extension polls
     appBlocker.js         process listing + force-kill for blocked native apps
     presetBlocklists.js   curated one-click blocklist categories
     sessionEngine.js      session start/stop, schedule matching, restart-persistence
     preload.js            contextBridge API exposed to the renderer
   renderer/     UI (plain HTML/CSS/JS, no framework)
-scripts/generate-icons.js   generates the placeholder app/tray icons in assets/
+extension/      Chromium browser extension (Manifest V3)
+  manifest.json
+  background.js         polls statusServer, computes declarativeNetRequest rules
+  blocked.html           the "You are free from your loop" block page
+scripts/generate-icons.js   generates the placeholder app/tray/extension icons
 ```

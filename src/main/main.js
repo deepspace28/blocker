@@ -4,6 +4,7 @@ const crypto = require('crypto');
 const store = require('./store');
 const sessionEngine = require('./sessionEngine');
 const presetBlocklists = require('./presetBlocklists');
+const statusServer = require('./statusServer');
 
 function cleanDomain(raw) {
   return String(raw).trim().toLowerCase().replace(/^https?:\/\//, '').replace(/\/.*$/, '');
@@ -210,6 +211,7 @@ app.whenReady().then(async () => {
   registerIpcHandlers();
   createWindow();
   createTray();
+  statusServer.start();
 
   await sessionEngine.restoreOnLaunch();
   sessionEngine.on('state', (state) => {
