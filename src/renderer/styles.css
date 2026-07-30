@@ -98,6 +98,47 @@ body {
   font-size: 11px;
 }
 .banner.hidden { display: none; }
+.banner-btn {
+  display: block;
+  margin-top: 9px;
+  background: rgba(216, 161, 58, 0.22);
+  border: 1px solid rgba(216, 161, 58, 0.55);
+  color: #f7e6c2;
+  border-radius: 7px;
+  padding: 6px 12px;
+  font-size: 12px;
+  cursor: pointer;
+  font-weight: 600;
+}
+.banner-btn:hover { background: rgba(216, 161, 58, 0.32); }
+
+/* ---------- setup ---------- */
+
+.setup-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 9px 0;
+  font-size: 13px;
+  border-bottom: 1px solid var(--border);
+}
+.setup-row:last-child { border-bottom: none; }
+
+.status-tag {
+  font-size: 11px;
+  padding: 3px 10px;
+  border-radius: 999px;
+  background: #3a2f22;
+  color: #f0cf9a;
+  white-space: nowrap;
+}
+.status-tag.ok { background: #1e4832; color: #9fe3bd; }
+.status-tag.bad { background: #4a2528; color: #f0b9bb; }
+.status-tag.neutral { background: var(--bg-input); color: var(--text-dim); }
+
+.switch { display: flex; align-items: center; gap: 7px; font-size: 12px; color: var(--text-dim); cursor: pointer; }
+.switch input { accent-color: var(--accent); }
 
 /* ---------- layout ---------- */
 

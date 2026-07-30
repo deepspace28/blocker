@@ -21,28 +21,50 @@ hosts-file edit — this is the deliberate replacement for the earlier version, 
 hosts-file/sudo-prompt approach that popped an OS permission dialog on every session start/stop.
 
 **If the extension isn't installed or the app isn't running, the app says so** — a red
-"Extension not detected" pill in the header and a banner with install instructions. Blocking
-failing silently was the single most confusing failure mode, so it's now impossible to miss.
+"Extension not detected" pill in the header, plus a banner pointing at Setup. Blocking failing
+silently was the single most confusing failure mode, so it's now impossible to miss.
 
-**Trade-off worth knowing:** since blocking now happens inside the browser rather than at the OS
-network level, it only covers browsers that have the extension installed — not other browsers, not
-non-browser apps that hit the network directly. If you want a specific browser blocked, install the
-extension there.
+**Trade-off worth knowing:** since blocking happens inside the browser rather than at the OS
+network level, it only covers Chromium browsers that setup configured — not Firefox/Safari, and not
+non-browser apps that hit the network directly. App blocking covers native apps separately.
 
-## Installing the browser extension
+## Setup — you never touch chrome://extensions
 
-This isn't published to the Chrome Web Store (that requires a developer account and review), so
-you load it as an "unpacked" extension — takes under a minute:
+Open the app, go to the **Setup** tab, and press **Set up automatic blocking**. You approve
+**one** administrator prompt, and that's the whole install. FocusLock then:
 
-1. Open `chrome://extensions` (or `edge://extensions` for Edge, `brave://extensions` for Brave —
-   any Chromium-based browser works).
-2. Turn on **Developer mode** (top-right toggle).
-3. Click **Load unpacked** and select this repo's `extension/` folder.
-4. Done. It'll show "FocusLock Blocker" in your extensions list and start polling the desktop app
-   automatically.
+1. Packs the extension into a signed `.crx`, using a key generated once and kept in your user
+   data folder — so the extension ID stays stable forever.
+2. Writes a **managed browser policy** (the same mechanism companies use to deploy extensions to
+   staff) marking that extension `force_installed`, for Chrome, Edge, and Brave.
+3. Serves the extension from the app's own localhost server for the browser to fetch.
+4. Turns on start-at-login, so blocking is in force without you remembering to open the app.
 
-(Firefox isn't supported yet — its Manifest V3 `declarativeNetRequest` support differs enough
-that it'd need a separate build.)
+Fully quit and reopen your browser, and the extension is simply there.
+
+**It also can't be switched off.** A force-installed extension has no "Remove" or "Disable"
+button in the browser — which is what makes hard mode genuinely hard, rather than one click away.
+
+This is fully reversible: **Remove automatic blocking** on the same tab deletes the policy and
+disables start-at-login.
+
+Verified end-to-end: with only the policy in place and the app serving the `.crx`, a clean
+browser profile installs the extension by itself, registering as `EXTERNAL_POLICY_DOWNLOAD`
+(policy-installed, non-removable). No developer mode, no manual load.
+
+**Requirements and caveats**
+- The FocusLock app must be running the first time the browser installs the extension, since the
+  browser fetches it from the app's localhost server. After that the browser caches it.
+- Administrator rights are needed for that one prompt, because machine-wide browser policy lives
+  in a protected location (`HKLM` on Windows, `/etc/...` on Linux, `/Library/Managed Preferences`
+  on macOS). Nothing after setup ever asks again.
+- Firefox and Safari aren't supported — different extension and policy systems.
+
+### Manual install (alternative)
+
+If you'd rather not grant admin rights, you can still load it yourself: `chrome://extensions` →
+enable **Developer mode** → **Load unpacked** → select this repo's `extension/` folder. Same
+blocking, but the extension stays user-removable, so hard mode is weaker.
 
 ## Features
 
@@ -124,7 +146,10 @@ src/
   main/         Electron main process
     main.js             app lifecycle, window, tray, IPC handlers
     store.js             persisted JSON store (electron-store)
-    statusServer.js       localhost-only API: /status, /events long-poll, heartbeat
+    statusServer.js       localhost API: /status, /events long-poll, heartbeat, .crx serving
+    crx.js                signing key + Chrome extension ID derivation
+    extensionPacker.js    packs the extension into a signed .crx
+    managedInstall.js     writes/removes the managed browser policy (the one admin prompt)
     appBlocker.js         process listing + force-kill for blocked native apps
     presetBlocklists.js   curated one-click blocklist categories
     sessionEngine.js      session start/stop, schedule matching, restart-persistence

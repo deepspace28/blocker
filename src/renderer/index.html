@@ -25,14 +25,14 @@
         <button class="tab-btn" data-tab="apps">Apps</button>
         <button class="tab-btn" data-tab="schedules">Schedules</button>
         <button class="tab-btn" data-tab="stats">Stats</button>
+        <button class="tab-btn" data-tab="setup">Setup</button>
       </nav>
     </header>
 
     <div class="banner hidden" id="ext-banner">
-      <strong>Extension not detected.</strong>
-      <span>Website blocking won't work until you install it. Open
-      <code>chrome://extensions</code> → enable <em>Developer mode</em> →
-      <em>Load unpacked</em> → pick this project's <code>extension</code> folder.</span>
+      <strong>Website blocking isn't active yet.</strong>
+      <span>Run the one-time setup and FocusLock installs itself into your browser automatically.</span>
+      <button class="banner-btn" id="banner-setup-btn">Go to Setup</button>
     </div>
 
     <main class="content">
@@ -173,6 +173,50 @@
         <div class="stats-grid" id="stats-grid"></div>
         <h3>Recent sessions</h3>
         <ul class="list" id="history-ul"></ul>
+      </section>
+
+      <!-- SETUP -->
+      <section id="tab-setup" class="tab-panel">
+        <h2>Setup</h2>
+        <p class="hint">FocusLock installs itself into your browser using the same
+        managed-policy mechanism companies use to deploy software. You approve
+        <strong>once</strong>; after that the extension appears automatically and
+        <strong>can't be turned off from the browser</strong> — which is what makes hard
+        mode actually hard.</p>
+
+        <div class="card">
+          <div class="setup-row">
+            <span>Browser install</span>
+            <span class="status-tag" id="setup-policy">checking…</span>
+          </div>
+          <div class="setup-row">
+            <span>Extension reporting in</span>
+            <span class="status-tag" id="setup-conn">checking…</span>
+          </div>
+          <div class="setup-row">
+            <span>Browsers detected</span>
+            <span class="status-tag neutral" id="setup-browsers">…</span>
+          </div>
+          <div class="setup-row">
+            <span>Start at login</span>
+            <label class="switch">
+              <input type="checkbox" id="setup-login" />
+              <span>enabled</span>
+            </label>
+          </div>
+        </div>
+
+        <button class="primary-btn" id="setup-install-btn">Set up automatic blocking</button>
+        <p class="hint" id="setup-msg">You'll see one administrator prompt. Nothing else to do.</p>
+
+        <h3>Reverse it</h3>
+        <p class="hint">Removes the browser policy and stops FocusLock starting at login.
+        Everything this wrote is undone.</p>
+        <button class="secondary-btn full" id="setup-remove-btn">Remove automatic blocking</button>
+
+        <h3>Restart your browser</h3>
+        <p class="hint">Browsers read managed policy at startup, so fully quit and reopen your
+        browser after setup for the extension to appear.</p>
       </section>
     </main>
   </div>

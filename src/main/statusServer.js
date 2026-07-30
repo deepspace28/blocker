@@ -11,6 +11,7 @@
 //                            That delay was the reason a freshly-started
 //                            session let the first page load through.
 const http = require('http');
+const fs = require('fs');
 const { EventEmitter } = require('events');
 const store = require('./store');
 
@@ -102,6 +103,41 @@ class StatusServer extends EventEmitter {
     });
   }
 
+  /** Injected by main.js so this module stays free of Electron imports. */
+  setManagedInstallContext(context) {
+    this._managed = context; // { crxPath, extensionId, version }
+  }
+
+  _serveUpdateManifest(res) {
+    if (!this._managed) {
+      res.writeHead(503);
+      res.end('managed install not prepared');
+      return;
+    }
+    const { extensionId, version } = this._managed;
+    const xml =
+      `<?xml version='1.0' encoding='UTF-8'?>\n` +
+      `<gupdate xmlns='http://www.google.com/update2/response' protocol='2.0'>\n` +
+      `  <app appid='${extensionId}'>\n` +
+      `    <updatecheck codebase='http://127.0.0.1:${PORT}/focuslock.crx' version='${version}' />\n` +
+      `  </app>\n` +
+      `</gupdate>\n`;
+    res.setHeader('Content-Type', 'text/xml');
+    res.setHeader('Cache-Control', 'no-store');
+    res.end(xml);
+  }
+
+  _serveCrx(res) {
+    if (!this._managed || !fs.existsSync(this._managed.crxPath)) {
+      res.writeHead(404);
+      res.end('crx not built');
+      return;
+    }
+    res.setHeader('Content-Type', 'application/x-chrome-extension');
+    res.setHeader('Cache-Control', 'no-store');
+    fs.createReadStream(this._managed.crxPath).pipe(res);
+  }
+
   start() {
     if (this._server) return;
 
@@ -119,6 +155,18 @@ class StatusServer extends EventEmitter {
       }
       if (url.pathname === '/events') {
         this._handleEvents(req, res, url);
+        return;
+      }
+      // Managed-install endpoints: the browser's policy engine fetches the
+      // update manifest from here and then downloads the signed .crx, which
+      // is what installs the extension without the user touching
+      // chrome://extensions.
+      if (url.pathname === '/update.xml') {
+        this._serveUpdateManifest(res);
+        return;
+      }
+      if (url.pathname === '/focuslock.crx') {
+        this._serveCrx(res);
         return;
       }
       res.writeHead(404);

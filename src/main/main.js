@@ -5,6 +5,9 @@ const store = require('./store');
 const sessionEngine = require('./sessionEngine');
 const presetBlocklists = require('./presetBlocklists');
 const statusServer = require('./statusServer');
+const crx = require('./crx');
+const extensionPacker = require('./extensionPacker');
+const managedInstall = require('./managedInstall');
 
 function cleanDomain(raw) {
   return String(raw).trim().toLowerCase().replace(/^https?:\/\//, '').replace(/\/.*$/, '');
@@ -205,12 +208,66 @@ function registerIpcHandlers() {
     sessionEngine.emitState();
     return schedules;
   });
+
+  // --- automatic (managed) extension install ---
+
+  ipcMain.handle('setup:info', async () => {
+    const extensionId = crx.extensionId(app);
+    return {
+      extensionId,
+      browsers: extensionPacker.findBrowsers().map((b) => b.name),
+      policyInstalled: await managedInstall.isInstalled(extensionId),
+      extensionConnected: statusServer.isExtensionConnected(),
+      launchAtLogin: app.getLoginItemSettings().openAtLogin,
+    };
+  });
+
+  ipcMain.handle('setup:install', async () => {
+    const extensionId = crx.extensionId(app);
+    // Pack first: if this fails there's no point prompting for admin.
+    const { packedBy } = await extensionPacker.packExtension(app);
+    prepareManagedInstall();
+    const browsers = await managedInstall.install(extensionId);
+    // Start at login too, so blocking is in force without the user
+    // remembering to open the app.
+    app.setLoginItemSettings({ openAtLogin: true, openAsHidden: true });
+    return { extensionId, packedBy, browsers };
+  });
+
+  ipcMain.handle('setup:uninstall', async () => {
+    const extensionId = crx.extensionId(app);
+    const browsers = await managedInstall.uninstall(extensionId);
+    app.setLoginItemSettings({ openAtLogin: false });
+    return { browsers };
+  });
+
+  ipcMain.handle('setup:setLaunchAtLogin', (_e, enabled) => {
+    app.setLoginItemSettings({ openAtLogin: !!enabled, openAsHidden: true });
+    return app.getLoginItemSettings().openAtLogin;
+  });
+}
+
+/** Tell the status server where the packed .crx lives so the browser's
+ *  policy engine can fetch it. Safe to call before the crx exists — the
+ *  endpoint 404s until it's built. */
+function prepareManagedInstall() {
+  try {
+    statusServer.setManagedInstallContext({
+      crxPath: crx.crxPath(app),
+      extensionId: crx.extensionId(app),
+      version: extensionPacker.extensionVersion(app),
+    });
+  } catch (err) {
+    // Missing extension source in a broken install; the Setup tab will
+    // surface the real error when the user tries to install.
+  }
 }
 
 app.whenReady().then(async () => {
   registerIpcHandlers();
   createWindow();
   createTray();
+  prepareManagedInstall();
   statusServer.start();
 
   await sessionEngine.restoreOnLaunch();

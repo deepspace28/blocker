@@ -24,7 +24,8 @@
     "productName": "FocusLock",
     "files": [
       "src/**/*",
-      "assets/**/*"
+      "assets/**/*",
+      "extension/**/*"
     ],
     "mac": {
       "category": "public.app-category.productivity"
@@ -34,6 +35,12 @@
     },
     "linux": {
       "target": "AppImage"
-    }
+    },
+    "extraResources": [
+      {
+        "from": "extension",
+        "to": "extension"
+      }
+    ]
   }
 }

@@ -322,6 +322,76 @@ function renderStats() {
   }
 }
 
+// ---------- setup tab ----------
+
+let setupInfo = null;
+
+function setTag(el, text, kind) {
+  el.textContent = text;
+  el.className = `status-tag${kind ? ' ' + kind : ''}`;
+}
+
+async function refreshSetup() {
+  try {
+    setupInfo = await window.focuslock.getSetupInfo();
+  } catch (err) {
+    return;
+  }
+
+  setTag($('#setup-policy'),
+    setupInfo.policyInstalled ? 'installed' : 'not installed',
+    setupInfo.policyInstalled ? 'ok' : 'bad');
+
+  setTag($('#setup-conn'),
+    setupInfo.extensionConnected ? 'connected' : 'not yet',
+    setupInfo.extensionConnected ? 'ok' : '');
+
+  setTag($('#setup-browsers'),
+    setupInfo.browsers.length ? setupInfo.browsers.join(', ') : 'none found',
+    setupInfo.browsers.length ? 'neutral' : 'bad');
+
+  $('#setup-login').checked = !!setupInfo.launchAtLogin;
+  $('#setup-install-btn').textContent = setupInfo.policyInstalled
+    ? 'Re-run setup'
+    : 'Set up automatic blocking';
+}
+
+$('#banner-setup-btn').addEventListener('click', () => switchTab('setup'));
+
+$('#setup-install-btn').addEventListener('click', async () => {
+  const btn = $('#setup-install-btn');
+  const msg = $('#setup-msg');
+  btn.disabled = true;
+  msg.textContent = 'Packaging the extension and asking for administrator approval…';
+  try {
+    const result = await window.focuslock.runSetup();
+    msg.innerHTML = `Done — configured for <strong>${result.browsers.join(', ')}</strong>. ` +
+      'Fully quit and reopen your browser, and FocusLock will be there automatically.';
+    await refreshSetup();
+  } catch (err) {
+    msg.textContent = err.message || 'Setup failed.';
+  } finally {
+    btn.disabled = false;
+  }
+});
+
+$('#setup-remove-btn').addEventListener('click', async () => {
+  if (!confirm('Remove the browser policy and stop FocusLock starting at login?')) return;
+  const msg = $('#setup-msg');
+  try {
+    await window.focuslock.undoSetup();
+    msg.textContent = 'Removed. Restart your browser to finish uninstalling the extension.';
+    await refreshSetup();
+  } catch (err) {
+    msg.textContent = err.message || 'Could not remove the policy.';
+  }
+});
+
+$('#setup-login').addEventListener('change', async (e) => {
+  await window.focuslock.setLaunchAtLogin(e.target.checked);
+  await refreshSetup();
+});
+
 // ---------- render all ----------
 
 function renderAll() {
@@ -420,9 +490,11 @@ async function init() {
   state = await window.focuslock.getState();
   renderAll();
   updateModeHint();
+  refreshSetup();
   window.focuslock.onStateUpdate((newState) => {
     state = newState;
     renderAll();
+    refreshSetup();
   });
 }
 

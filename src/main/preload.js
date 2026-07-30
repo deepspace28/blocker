@@ -23,6 +23,11 @@ contextBridge.exposeInMainWorld('focuslock', {
   startSession: (opts) => ipcRenderer.invoke('session:start', opts),
   stopSession: () => ipcRenderer.invoke('session:stop'),
 
+  getSetupInfo: () => ipcRenderer.invoke('setup:info'),
+  runSetup: () => ipcRenderer.invoke('setup:install'),
+  undoSetup: () => ipcRenderer.invoke('setup:uninstall'),
+  setLaunchAtLogin: (enabled) => ipcRenderer.invoke('setup:setLaunchAtLogin', enabled),
+
   addSchedule: (schedule) => ipcRenderer.invoke('schedule:add', schedule),
   updateSchedule: (id, patch) => ipcRenderer.invoke('schedule:update', { id, patch }),
   removeSchedule: (id) => ipcRenderer.invoke('schedule:remove', id),
