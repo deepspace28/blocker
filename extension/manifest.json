@@ -3,7 +3,7 @@
   "name": "FocusLock Blocker",
   "version": "1.0.0",
   "description": "Blocks distracting sites during your FocusLock focus sessions, with no permission prompts.",
-  "permissions": ["declarativeNetRequest", "alarms"],
+  "permissions": ["declarativeNetRequest", "alarms", "webNavigation"],
   "host_permissions": ["http://127.0.0.1/*", "<all_urls>"],
   "background": {
     "service_worker": "background.js"

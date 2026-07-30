@@ -8,12 +8,16 @@ const ALARM_NAME = 'focuslock-refresh';
 async function fetchStatus() {
   try {
     const res = await fetch(STATUS_URL, { cache: 'no-store' });
-    if (!res.ok) return null;
+    if (!res.ok) {
+      console.warn('[FocusLock] status endpoint returned', res.status);
+      return null;
+    }
     return await res.json();
   } catch (err) {
     // FocusLock app isn't running / unreachable — leave existing rules as
     // they are rather than failing open, so a hard-mode block doesn't
     // silently lift just because the status server hiccuped.
+    console.warn('[FocusLock] could not reach the desktop app at', STATUS_URL, '-', err.message);
     return null;
   }
 }
@@ -61,7 +65,16 @@ async function refreshRules() {
     }
   }
 
-  await chrome.declarativeNetRequest.updateDynamicRules({ removeRuleIds, addRules });
+  try {
+    await chrome.declarativeNetRequest.updateDynamicRules({ removeRuleIds, addRules });
+    console.log(
+      '[FocusLock] rules updated — active:', status.active,
+      'mode:', status.mode,
+      'rule count:', addRules.length
+    );
+  } catch (err) {
+    console.error('[FocusLock] updateDynamicRules failed:', err.message, JSON.stringify(addRules));
+  }
 }
 
 function ensureAlarm() {
@@ -78,6 +91,13 @@ chrome.runtime.onStartup.addListener(() => {
 });
 chrome.alarms.onAlarm.addListener((alarm) => {
   if (alarm.name === ALARM_NAME) refreshRules();
+});
+
+// Also react immediately whenever a tab starts loading, instead of only on
+// the ~30s alarm — makes a just-started/just-stopped session take effect
+// right away rather than up to 30s later.
+chrome.webNavigation.onBeforeNavigate.addListener((details) => {
+  if (details.frameId === 0) refreshRules();
 });
 
 ensureAlarm();
