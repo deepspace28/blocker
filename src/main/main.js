@@ -214,11 +214,25 @@ app.whenReady().then(async () => {
   statusServer.start();
 
   await sessionEngine.restoreOnLaunch();
-  sessionEngine.on('state', (state) => {
+
+  const pushState = () => {
     if (mainWindow && !mainWindow.isDestroyed()) {
-      mainWindow.webContents.send('state:update', state);
+      mainWindow.webContents.send('state:update', sessionEngine.getState());
     }
+  };
+
+  sessionEngine.on('state', () => {
+    // Release any long-polling extension immediately, so a session start or
+    // stop reaches the browser in milliseconds rather than on the next poll.
+    statusServer.notifyChanged();
+    pushState();
   });
+
+  // Surface extension connect/disconnect in the UI, so "nothing is being
+  // blocked because the extension isn't installed" is visible rather than
+  // a silent no-op.
+  statusServer.on('connection', pushState);
+
   sessionEngine.startTicking();
 
   app.on('activate', () => {

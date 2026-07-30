@@ -19,6 +19,9 @@ class SessionEngine extends EventEmitter {
   }
 
   getState() {
+    // Required lazily: statusServer reads the store too, and pulling it in
+    // at module load would make the two files circular.
+    const statusServer = require('./statusServer');
     return {
       activeSession: store.get('activeSession'),
       blocklist: store.get('blocklist'),
@@ -26,6 +29,7 @@ class SessionEngine extends EventEmitter {
       appBlocklist: store.get('appBlocklist'),
       schedules: store.get('schedules'),
       history: store.get('history'),
+      extensionConnected: statusServer.isExtensionConnected(),
     };
   }
 

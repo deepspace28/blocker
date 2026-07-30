@@ -9,12 +9,17 @@
 <body>
   <div class="app">
     <header class="app-header">
-      <div class="brand">
-        <img src="../../assets/tray32.png" alt="" width="24" height="24" />
-        <span>FocusLock</span>
+      <div class="header-top">
+        <div class="brand">
+          <img src="../../assets/tray32.png" alt="" width="22" height="22" />
+          <span>FocusLock</span>
+        </div>
+        <button class="conn-pill" id="conn-pill" title="Browser extension status">
+          <span class="dot"></span><span id="conn-text">Checking…</span>
+        </button>
       </div>
       <nav class="tabs">
-        <button class="tab-btn active" data-tab="home">Home</button>
+        <button class="tab-btn active" data-tab="home">Focus</button>
         <button class="tab-btn" data-tab="blocklist">Blocklist</button>
         <button class="tab-btn" data-tab="allowlist">Allowlist</button>
         <button class="tab-btn" data-tab="apps">Apps</button>
@@ -23,38 +28,73 @@
       </nav>
     </header>
 
+    <div class="banner hidden" id="ext-banner">
+      <strong>Extension not detected.</strong>
+      <span>Website blocking won't work until you install it. Open
+      <code>chrome://extensions</code> → enable <em>Developer mode</em> →
+      <em>Load unpacked</em> → pick this project's <code>extension</code> folder.</span>
+    </div>
+
     <main class="content">
-      <!-- HOME -->
+      <!-- FOCUS -->
       <section id="tab-home" class="tab-panel active">
         <div id="idle-view">
-          <h2>Start a focus session</h2>
-
-          <div class="mode-row">
+          <div class="card">
+            <div class="card-title">Mode</div>
             <label class="mode-option">
               <input type="radio" name="session-mode" value="block" checked />
-              <span>Block these sites</span>
+              <span>
+                <strong>Block distractions</strong>
+                <em>Blocks the sites on your blocklist.</em>
+              </span>
             </label>
             <label class="mode-option">
               <input type="radio" name="session-mode" value="allow" />
-              <span>Lock the Internet (allow only these sites)</span>
+              <span>
+                <strong>Lock the Internet</strong>
+                <em>Blocks everything except your allowlist.</em>
+              </span>
             </label>
           </div>
 
-          <label class="field">
-            <span>Duration (minutes)</span>
-            <input type="number" id="duration-input" min="1" value="25" />
-          </label>
-          <label class="field checkbox">
+          <div class="card">
+            <div class="card-title">Duration</div>
+            <div class="preset-row" id="duration-presets">
+              <button class="chip" data-min="15">15m</button>
+              <button class="chip active" data-min="25">25m</button>
+              <button class="chip" data-min="45">45m</button>
+              <button class="chip" data-min="60">1h</button>
+              <button class="chip" data-min="120">2h</button>
+            </div>
+            <div class="inline-field">
+              <input type="number" id="duration-input" min="1" value="25" />
+              <span>minutes</span>
+            </div>
+          </div>
+
+          <label class="hard-toggle">
             <input type="checkbox" id="hard-mode-input" />
-            <span>Hard mode — can't stop early, even after restarting</span>
+            <span>
+              <strong>Hard mode</strong>
+              <em>No early exit — survives quitting and restarting.</em>
+            </span>
           </label>
+
           <button id="start-session-btn" class="primary-btn">Start session</button>
-          <p class="hint" id="mode-hint">Blocks everything in your <a href="#" data-goto="blocklist">blocklist</a>, plus any <a href="#" data-goto="apps">blocked apps</a>, for the duration you choose.</p>
+          <p class="hint" id="mode-hint"></p>
         </div>
 
         <div id="active-view" class="hidden">
-          <h2>Session in progress</h2>
-          <div class="countdown" id="countdown">00:00:00</div>
+          <div class="ring-wrap">
+            <svg class="ring" viewBox="0 0 220 220" aria-hidden="true">
+              <circle class="ring-track" cx="110" cy="110" r="96" />
+              <circle class="ring-fill" id="ring-fill" cx="110" cy="110" r="96" />
+            </svg>
+            <div class="ring-center">
+              <div class="countdown" id="countdown">00:00:00</div>
+              <div class="ring-label" id="ring-label">remaining</div>
+            </div>
+          </div>
           <div class="session-meta" id="session-meta"></div>
           <button id="stop-session-btn" class="danger-btn">Stop session</button>
           <p class="hint" id="hard-mode-hint"></p>
@@ -64,7 +104,7 @@
       <!-- BLOCKLIST -->
       <section id="tab-blocklist" class="tab-panel">
         <h2>Blocklist</h2>
-        <p class="hint">Sites blocked during a "Block" session, unless a schedule overrides with its own list. Enforced by the FocusLock browser extension — install it once and it just works, no permission prompts.</p>
+        <p class="hint">Blocked during a <strong>Block distractions</strong> session. Subdomains are included automatically.</p>
         <div class="preset-row" id="preset-row"></div>
         <div class="add-row">
           <input type="text" id="domain-input" placeholder="e.g. facebook.com" />
@@ -76,19 +116,18 @@
       <!-- ALLOWLIST -->
       <section id="tab-allowlist" class="tab-panel">
         <h2>Allowlist</h2>
-        <p class="hint">Used by "Lock the Internet" mode — during that session, only these sites (and their subdomains) are reachable; everything else is blocked.</p>
+        <p class="hint">Used by <strong>Lock the Internet</strong> — during that session only these sites are reachable, everything else is blocked.</p>
         <div class="add-row">
           <input type="text" id="allow-input" placeholder="e.g. docs.google.com" />
           <button id="add-allow-btn" class="secondary-btn">Add</button>
         </div>
         <ul class="list" id="allowlist-ul"></ul>
-        <p class="hint">Note: this is enforced by the FocusLock browser extension, not the desktop app itself — install it and it'll pick this up automatically. Only browsers with the extension installed are covered.</p>
       </section>
 
       <!-- APPS -->
       <section id="tab-apps" class="tab-panel">
         <h2>Blocked apps</h2>
-        <p class="hint">Native apps force-closed (and kept closed) during any session, regardless of mode. Use the name as it appears in Task Manager / Activity Monitor, e.g. "Steam", "Discord", "Slack.exe".</p>
+        <p class="hint">Force-closed and kept closed during any session, in either mode. Use the name from Task Manager / Activity Monitor, e.g. <code>Discord</code> or <code>Steam.exe</code>. This part needs no browser extension.</p>
         <div class="add-row">
           <input type="text" id="app-input" placeholder="e.g. Discord" />
           <button id="add-app-btn" class="secondary-btn">Add</button>
@@ -99,37 +138,31 @@
       <!-- SCHEDULES -->
       <section id="tab-schedules" class="tab-panel">
         <h2>Recurring schedules</h2>
-        <p class="hint">Auto-start a session during these windows, as long as FocusLock is running.</p>
-        <div class="schedule-form">
-          <input type="text" id="sched-name" placeholder="Name (e.g. Work hours)" />
-          <div class="mode-row">
-            <label class="mode-option">
-              <input type="radio" name="sched-mode" value="block" checked />
-              <span>Block</span>
-            </label>
-            <label class="mode-option">
-              <input type="radio" name="sched-mode" value="allow" />
-              <span>Lock the Internet</span>
-            </label>
+        <p class="hint">Auto-start a session in these windows while FocusLock is running.</p>
+        <div class="card">
+          <input type="text" id="sched-name" class="text-input" placeholder="Name (e.g. Work hours)" />
+          <div class="seg" id="sched-mode-seg">
+            <label><input type="radio" name="sched-mode" value="block" checked /><span>Block</span></label>
+            <label><input type="radio" name="sched-mode" value="allow" /><span>Lock the Internet</span></label>
           </div>
           <div class="days-row" id="days-row">
-            <label><input type="checkbox" value="1" /> Mon</label>
-            <label><input type="checkbox" value="2" /> Tue</label>
-            <label><input type="checkbox" value="3" /> Wed</label>
-            <label><input type="checkbox" value="4" /> Thu</label>
-            <label><input type="checkbox" value="5" /> Fri</label>
-            <label><input type="checkbox" value="6" /> Sat</label>
-            <label><input type="checkbox" value="0" /> Sun</label>
+            <label><input type="checkbox" value="1" /><span>Mon</span></label>
+            <label><input type="checkbox" value="2" /><span>Tue</span></label>
+            <label><input type="checkbox" value="3" /><span>Wed</span></label>
+            <label><input type="checkbox" value="4" /><span>Thu</span></label>
+            <label><input type="checkbox" value="5" /><span>Fri</span></label>
+            <label><input type="checkbox" value="6" /><span>Sat</span></label>
+            <label><input type="checkbox" value="0" /><span>Sun</span></label>
           </div>
           <div class="time-row">
             <label>Start <input type="time" id="sched-start" value="09:00" /></label>
             <label>End <input type="time" id="sched-end" value="17:00" /></label>
           </div>
-          <label class="field checkbox">
+          <label class="check-line">
             <input type="checkbox" id="sched-hard" />
             <span>Hard mode for this schedule</span>
           </label>
-          <button id="add-schedule-btn" class="secondary-btn">Add schedule</button>
+          <button id="add-schedule-btn" class="secondary-btn full">Add schedule</button>
         </div>
         <ul class="list" id="schedules-ul"></ul>
       </section>
@@ -138,7 +171,7 @@
       <section id="tab-stats" class="tab-panel">
         <h2>Stats</h2>
         <div class="stats-grid" id="stats-grid"></div>
-        <h3>History</h3>
+        <h3>Recent sessions</h3>
         <ul class="list" id="history-ul"></ul>
       </section>
     </main>

@@ -14,11 +14,15 @@ set recurring schedules, and use hard mode when you don't trust yourself with an
   browser it's installed in. When you try to visit a blocked site, it redirects you to a full-page
   "You are free from your loop" screen instead of the site.
 
-The desktop app runs a tiny read-only status API on `127.0.0.1:38219` that only your own machine
-can reach; the extension polls it every ~30 seconds and turns the current session into browser
-blocking rules. Neither side needs a password, an admin prompt, or a hosts-file edit — this is
-the deliberate replacement for the earlier version, which used a hosts-file/sudo-prompt approach
-that popped an OS permission dialog on every session start/stop.
+The desktop app runs a tiny localhost-only API on `127.0.0.1:38219` that only your own machine
+can reach; the extension keeps a long-poll open against it, so a session starting or stopping
+reaches the browser in milliseconds. Neither side needs a password, an admin prompt, or a
+hosts-file edit — this is the deliberate replacement for the earlier version, which used a
+hosts-file/sudo-prompt approach that popped an OS permission dialog on every session start/stop.
+
+**If the extension isn't installed or the app isn't running, the app says so** — a red
+"Extension not detected" pill in the header and a banner with install instructions. Blocking
+failing silently was the single most confusing failure mode, so it's now impossible to miss.
 
 **Trade-off worth knowing:** since blocking now happens inside the browser rather than at the OS
 network level, it only covers browsers that have the extension installed — not other browsers, not
@@ -60,11 +64,21 @@ that it'd need a separate build.)
 
 ## How blocking works
 
-The extension computes Chrome's `declarativeNetRequest` rules from whatever the desktop app's
-status API currently reports:
-- **Block mode**: a redirect-to-`blocked.html` rule for every domain on your blocklist.
-- **Allow mode ("Lock the Internet")**: an `allow` rule (higher priority) for every domain on
-  your allowlist, plus a catch-all redirect rule for everything else.
+The extension enforces in two deliberate layers:
+
+1. **`declarativeNetRequest` rules** — the fast, steady-state blocker.
+   - *Block mode*: a redirect-to-`blocked.html` rule per blocklist domain.
+   - *Allow mode*: a high-priority `allow` rule per allowlist domain, plus a catch-all redirect.
+   - Both modes always exempt `127.0.0.1:38219` so FocusLock's own status page stays reachable
+     for diagnosis mid-session.
+2. **Direct tab redirection** — a safety net driven by cached session state. DNR rules apply
+   asynchronously, so a navigation that begins before they land would otherwise slip through.
+   This layer also sweeps tabs that were *already open* when the session started, which DNR
+   rules never revisit on their own.
+
+Layer 2 exists because of two bugs found by end-to-end testing: the very first navigation after
+starting a session used to load the real site, and an already-open tab was never blocked at all.
+Both are covered by regression tests now.
 
 If the extension can't reach the status API (e.g. the FocusLock app isn't running), it leaves
 whatever rules were already in place rather than clearing them — so a brief app hiccup doesn't
@@ -110,7 +124,7 @@ src/
   main/         Electron main process
     main.js             app lifecycle, window, tray, IPC handlers
     store.js             persisted JSON store (electron-store)
-    statusServer.js       localhost-only read API the extension polls
+    statusServer.js       localhost-only API: /status, /events long-poll, heartbeat
     appBlocker.js         process listing + force-kill for blocked native apps
     presetBlocklists.js   curated one-click blocklist categories
     sessionEngine.js      session start/stop, schedule matching, restart-persistence
@@ -118,7 +132,8 @@ src/
   renderer/     UI (plain HTML/CSS/JS, no framework)
 extension/      Chromium browser extension (Manifest V3)
   manifest.json
-  background.js         polls statusServer, computes declarativeNetRequest rules
-  blocked.html           the "You are free from your loop" block page
+  background.js          long-polls statusServer; DNR rules + tab-level enforcement
+  blocked.html/.js       the "You are free from your loop" block page, with countdown
+  popup.html/.js         toolbar popup: session state and connection status
 scripts/generate-icons.js   generates the placeholder app/tray/extension icons
 ```
