@@ -1,0 +1,101 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'self'" />
+  <title>FocusLock</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <div class="app">
+    <header class="app-header">
+      <div class="brand">
+        <img src="../../assets/tray32.png" alt="" width="24" height="24" />
+        <span>FocusLock</span>
+      </div>
+      <nav class="tabs">
+        <button class="tab-btn active" data-tab="home">Home</button>
+        <button class="tab-btn" data-tab="blocklist">Blocklist</button>
+        <button class="tab-btn" data-tab="schedules">Schedules</button>
+        <button class="tab-btn" data-tab="stats">Stats</button>
+      </nav>
+    </header>
+
+    <main class="content">
+      <!-- HOME -->
+      <section id="tab-home" class="tab-panel active">
+        <div id="idle-view">
+          <h2>Start a focus session</h2>
+          <label class="field">
+            <span>Duration (minutes)</span>
+            <input type="number" id="duration-input" min="1" value="25" />
+          </label>
+          <label class="field checkbox">
+            <input type="checkbox" id="hard-mode-input" />
+            <span>Hard mode — can't stop early, even after restarting</span>
+          </label>
+          <button id="start-session-btn" class="primary-btn">Start session</button>
+          <p class="hint">Blocks everything in your <a href="#" data-goto="blocklist">blocklist</a> for the duration you choose.</p>
+        </div>
+
+        <div id="active-view" class="hidden">
+          <h2>Session in progress</h2>
+          <div class="countdown" id="countdown">00:00:00</div>
+          <div class="session-meta" id="session-meta"></div>
+          <button id="stop-session-btn" class="danger-btn">Stop session</button>
+          <p class="hint" id="hard-mode-hint"></p>
+        </div>
+      </section>
+
+      <!-- BLOCKLIST -->
+      <section id="tab-blocklist" class="tab-panel">
+        <h2>Blocklist</h2>
+        <p class="hint">Sites blocked during a session, unless a schedule overrides with its own list.</p>
+        <div class="add-row">
+          <input type="text" id="domain-input" placeholder="e.g. facebook.com" />
+          <button id="add-domain-btn" class="secondary-btn">Add</button>
+        </div>
+        <ul class="list" id="blocklist-ul"></ul>
+      </section>
+
+      <!-- SCHEDULES -->
+      <section id="tab-schedules" class="tab-panel">
+        <h2>Recurring schedules</h2>
+        <p class="hint">Auto-start a block during these windows, as long as FocusLock is running.</p>
+        <div class="schedule-form">
+          <input type="text" id="sched-name" placeholder="Name (e.g. Work hours)" />
+          <div class="days-row" id="days-row">
+            <label><input type="checkbox" value="1" /> Mon</label>
+            <label><input type="checkbox" value="2" /> Tue</label>
+            <label><input type="checkbox" value="3" /> Wed</label>
+            <label><input type="checkbox" value="4" /> Thu</label>
+            <label><input type="checkbox" value="5" /> Fri</label>
+            <label><input type="checkbox" value="6" /> Sat</label>
+            <label><input type="checkbox" value="0" /> Sun</label>
+          </div>
+          <div class="time-row">
+            <label>Start <input type="time" id="sched-start" value="09:00" /></label>
+            <label>End <input type="time" id="sched-end" value="17:00" /></label>
+          </div>
+          <label class="field checkbox">
+            <input type="checkbox" id="sched-hard" />
+            <span>Hard mode for this schedule</span>
+          </label>
+          <button id="add-schedule-btn" class="secondary-btn">Add schedule</button>
+        </div>
+        <ul class="list" id="schedules-ul"></ul>
+      </section>
+
+      <!-- STATS -->
+      <section id="tab-stats" class="tab-panel">
+        <h2>Stats</h2>
+        <div class="stats-grid" id="stats-grid"></div>
+        <h3>History</h3>
+        <ul class="list" id="history-ul"></ul>
+      </section>
+    </main>
+  </div>
+
+  <script src="renderer.js"></script>
+</body>
+</html>
