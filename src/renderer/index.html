@@ -16,6 +16,8 @@
       <nav class="tabs">
         <button class="tab-btn active" data-tab="home">Home</button>
         <button class="tab-btn" data-tab="blocklist">Blocklist</button>
+        <button class="tab-btn" data-tab="allowlist">Allowlist</button>
+        <button class="tab-btn" data-tab="apps">Apps</button>
         <button class="tab-btn" data-tab="schedules">Schedules</button>
         <button class="tab-btn" data-tab="stats">Stats</button>
       </nav>
@@ -26,6 +28,18 @@
       <section id="tab-home" class="tab-panel active">
         <div id="idle-view">
           <h2>Start a focus session</h2>
+
+          <div class="mode-row">
+            <label class="mode-option">
+              <input type="radio" name="session-mode" value="block" checked />
+              <span>Block these sites</span>
+            </label>
+            <label class="mode-option">
+              <input type="radio" name="session-mode" value="allow" />
+              <span>Lock the Internet (allow only these sites)</span>
+            </label>
+          </div>
+
           <label class="field">
             <span>Duration (minutes)</span>
             <input type="number" id="duration-input" min="1" value="25" />
@@ -35,7 +49,7 @@
             <span>Hard mode — can't stop early, even after restarting</span>
           </label>
           <button id="start-session-btn" class="primary-btn">Start session</button>
-          <p class="hint">Blocks everything in your <a href="#" data-goto="blocklist">blocklist</a> for the duration you choose.</p>
+          <p class="hint" id="mode-hint">Blocks everything in your <a href="#" data-goto="blocklist">blocklist</a>, plus any <a href="#" data-goto="apps">blocked apps</a>, for the duration you choose.</p>
         </div>
 
         <div id="active-view" class="hidden">
@@ -50,7 +64,8 @@
       <!-- BLOCKLIST -->
       <section id="tab-blocklist" class="tab-panel">
         <h2>Blocklist</h2>
-        <p class="hint">Sites blocked during a session, unless a schedule overrides with its own list.</p>
+        <p class="hint">Sites blocked during a "Block" session, unless a schedule overrides with its own list.</p>
+        <div class="preset-row" id="preset-row"></div>
         <div class="add-row">
           <input type="text" id="domain-input" placeholder="e.g. facebook.com" />
           <button id="add-domain-btn" class="secondary-btn">Add</button>
@@ -58,12 +73,45 @@
         <ul class="list" id="blocklist-ul"></ul>
       </section>
 
+      <!-- ALLOWLIST -->
+      <section id="tab-allowlist" class="tab-panel">
+        <h2>Allowlist</h2>
+        <p class="hint">Used by "Lock the Internet" mode — during that session, only these sites (and their subdomains) are reachable; everything else is blocked.</p>
+        <div class="add-row">
+          <input type="text" id="allow-input" placeholder="e.g. docs.google.com" />
+          <button id="add-allow-btn" class="secondary-btn">Add</button>
+        </div>
+        <ul class="list" id="allowlist-ul"></ul>
+        <p class="hint">Note: this works by pointing your system's network proxy at FocusLock while active, so coverage depends on your OS/browser respecting system proxy settings.</p>
+      </section>
+
+      <!-- APPS -->
+      <section id="tab-apps" class="tab-panel">
+        <h2>Blocked apps</h2>
+        <p class="hint">Native apps force-closed (and kept closed) during any session, regardless of mode. Use the name as it appears in Task Manager / Activity Monitor, e.g. "Steam", "Discord", "Slack.exe".</p>
+        <div class="add-row">
+          <input type="text" id="app-input" placeholder="e.g. Discord" />
+          <button id="add-app-btn" class="secondary-btn">Add</button>
+        </div>
+        <ul class="list" id="apps-ul"></ul>
+      </section>
+
       <!-- SCHEDULES -->
       <section id="tab-schedules" class="tab-panel">
         <h2>Recurring schedules</h2>
-        <p class="hint">Auto-start a block during these windows, as long as FocusLock is running.</p>
+        <p class="hint">Auto-start a session during these windows, as long as FocusLock is running.</p>
         <div class="schedule-form">
           <input type="text" id="sched-name" placeholder="Name (e.g. Work hours)" />
+          <div class="mode-row">
+            <label class="mode-option">
+              <input type="radio" name="sched-mode" value="block" checked />
+              <span>Block</span>
+            </label>
+            <label class="mode-option">
+              <input type="radio" name="sched-mode" value="allow" />
+              <span>Lock the Internet</span>
+            </label>
+          </div>
           <div class="days-row" id="days-row">
             <label><input type="checkbox" value="1" /> Mon</label>
             <label><input type="checkbox" value="2" /> Tue</label>

@@ -1,7 +1,13 @@
 const { app, BrowserWindow, Tray, Menu, ipcMain, nativeImage, dialog } = require('electron');
 const path = require('path');
+const crypto = require('crypto');
 const store = require('./store');
 const sessionEngine = require('./sessionEngine');
+const presetBlocklists = require('./presetBlocklists');
+
+function cleanDomain(raw) {
+  return String(raw).trim().toLowerCase().replace(/^https?:\/\//, '').replace(/\/.*$/, '');
+}
 
 let mainWindow = null;
 let tray = null;
@@ -86,7 +92,7 @@ function registerIpcHandlers() {
 
   ipcMain.handle('blocklist:add', (_e, domain) => {
     const list = store.get('blocklist');
-    const clean = String(domain).trim().toLowerCase().replace(/^https?:\/\//, '').replace(/\/.*$/, '');
+    const clean = cleanDomain(domain);
     if (clean && !list.includes(clean)) {
       list.push(clean);
       store.set('blocklist', list);
@@ -97,6 +103,56 @@ function registerIpcHandlers() {
 
   ipcMain.handle('blocklist:remove', (_e, domain) => {
     const list = store.get('blocklist').filter((d) => d !== domain);
+    store.set('blocklist', list);
+    sessionEngine.emitState();
+    return list;
+  });
+
+  ipcMain.handle('allowlist:add', (_e, domain) => {
+    const list = store.get('allowlist');
+    const clean = cleanDomain(domain);
+    if (clean && !list.includes(clean)) {
+      list.push(clean);
+      store.set('allowlist', list);
+      sessionEngine.emitState();
+    }
+    return store.get('allowlist');
+  });
+
+  ipcMain.handle('allowlist:remove', (_e, domain) => {
+    const list = store.get('allowlist').filter((d) => d !== domain);
+    store.set('allowlist', list);
+    sessionEngine.emitState();
+    return list;
+  });
+
+  ipcMain.handle('appBlocklist:add', (_e, appName) => {
+    const list = store.get('appBlocklist');
+    const clean = String(appName).trim();
+    if (clean && !list.includes(clean)) {
+      list.push(clean);
+      store.set('appBlocklist', list);
+      sessionEngine.emitState();
+    }
+    return store.get('appBlocklist');
+  });
+
+  ipcMain.handle('appBlocklist:remove', (_e, appName) => {
+    const list = store.get('appBlocklist').filter((a) => a !== appName);
+    store.set('appBlocklist', list);
+    sessionEngine.emitState();
+    return list;
+  });
+
+  ipcMain.handle('presets:list', () => presetBlocklists);
+
+  ipcMain.handle('presets:apply', (_e, categoryName) => {
+    const domains = presetBlocklists[categoryName];
+    if (!domains) return store.get('blocklist');
+    const list = store.get('blocklist');
+    for (const d of domains) {
+      if (!list.includes(d)) list.push(d);
+    }
     store.set('blocklist', list);
     sessionEngine.emitState();
     return list;
@@ -113,14 +169,16 @@ function registerIpcHandlers() {
   ipcMain.handle('schedule:add', (_e, schedule) => {
     const schedules = store.get('schedules');
     schedules.push({
-      id: require('crypto').randomUUID(),
+      id: crypto.randomUUID(),
       name: schedule.name || 'Untitled schedule',
       days: schedule.days || [],
       start: schedule.start,
       end: schedule.end,
       enabled: schedule.enabled !== false,
       hard: !!schedule.hard,
+      mode: schedule.mode === 'allow' ? 'allow' : 'block',
       domains: schedule.domains || null,
+      apps: schedule.apps || null,
       lastWindowKey: null,
       skippedWindowKey: null,
     });

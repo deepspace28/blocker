@@ -2,19 +2,26 @@ const { EventEmitter } = require('events');
 const crypto = require('crypto');
 const store = require('./store');
 const hostsBlocker = require('./hostsBlocker');
+const proxyBlocker = require('./proxyBlocker');
+const systemProxy = require('./systemProxy');
+const appBlocker = require('./appBlocker');
 
 const TICK_MS = 15000;
+const APP_ENFORCE_MS = 4000;
 
 class SessionEngine extends EventEmitter {
   constructor() {
     super();
     this._timer = null;
+    this._appTimer = null;
   }
 
   getState() {
     return {
       activeSession: store.get('activeSession'),
       blocklist: store.get('blocklist'),
+      allowlist: store.get('allowlist'),
+      appBlocklist: store.get('appBlocklist'),
       schedules: store.get('schedules'),
       history: store.get('history'),
     };
@@ -27,7 +34,11 @@ class SessionEngine extends EventEmitter {
   /**
    * Start a focus session.
    * @param {object} opts
-   * @param {string[]} opts.domains
+   * @param {'block'|'allow'} [opts.mode] 'block' = block the given/blocklist
+   *   domains; 'allow' = "Lock the Internet" — block everything except the
+   *   given/allowlist domains.
+   * @param {string[]} [opts.domains]
+   * @param {string[]} [opts.apps] native app process names to also kill
    * @param {number} opts.durationMinutes
    * @param {boolean} opts.hard
    * @param {'manual'|'schedule'} [opts.source]
@@ -38,7 +49,12 @@ class SessionEngine extends EventEmitter {
     if (existing) {
       throw new Error('A focus session is already active.');
     }
-    const domains = opts.domains && opts.domains.length ? opts.domains : store.get('blocklist');
+
+    const mode = opts.mode === 'allow' ? 'allow' : 'block';
+    const defaultList = mode === 'allow' ? store.get('allowlist') : store.get('blocklist');
+    const domains = opts.domains && opts.domains.length ? opts.domains : defaultList;
+    const apps = opts.apps && opts.apps.length ? opts.apps : store.get('appBlocklist');
+
     const startTime = Date.now();
     const endTime = startTime + Math.max(1, opts.durationMinutes) * 60 * 1000;
 
@@ -49,11 +65,22 @@ class SessionEngine extends EventEmitter {
       startTime,
       endTime,
       hard: !!opts.hard,
+      mode,
       domains,
+      apps,
+      proxyContext: null,
     };
 
-    await hostsBlocker.applyBlock(domains);
+    if (mode === 'allow') {
+      proxyBlocker.setAllowlist(domains);
+      proxyBlocker.startProxyServer();
+      session.proxyContext = await systemProxy.enable(proxyBlocker.PROXY_PORT);
+    } else {
+      await hostsBlocker.applyBlock(domains);
+    }
+
     store.set('activeSession', session);
+    this._startAppEnforcement(session.apps);
     this.emitState();
     return session;
   }
@@ -73,8 +100,22 @@ class SessionEngine extends EventEmitter {
     return { stopped: true };
   }
 
+  async _teardownEnforcement(session) {
+    this._stopAppEnforcement();
+    if (session.mode === 'allow') {
+      try {
+        await systemProxy.disable(session.proxyContext);
+      } catch (_) {
+        /* best effort */
+      }
+      proxyBlocker.stopProxyServer();
+    } else {
+      await hostsBlocker.removeBlock();
+    }
+  }
+
   async _endSession(session, { endedEarly }) {
-    await hostsBlocker.removeBlock();
+    await this._teardownEnforcement(session);
     store.set('activeSession', null);
 
     const history = store.get('history');
@@ -84,7 +125,9 @@ class SessionEngine extends EventEmitter {
       endTime: Date.now(),
       plannedEndTime: session.endTime,
       hard: session.hard,
+      mode: session.mode,
       domains: session.domains,
+      apps: session.apps,
       endedEarly,
       source: session.source,
     });
@@ -100,6 +143,20 @@ class SessionEngine extends EventEmitter {
     }
 
     this.emitState();
+  }
+
+  _startAppEnforcement(apps) {
+    this._stopAppEnforcement();
+    if (!apps || !apps.length) return;
+    appBlocker.enforce(apps).catch(() => {});
+    this._appTimer = setInterval(() => {
+      appBlocker.enforce(apps).catch(() => {});
+    }, APP_ENFORCE_MS);
+  }
+
+  _stopAppEnforcement() {
+    if (this._appTimer) clearInterval(this._appTimer);
+    this._appTimer = null;
   }
 
   _windowKey(schedule, now) {
@@ -150,13 +207,17 @@ class SessionEngine extends EventEmitter {
 
       const endTime = this._scheduleEndTimestamp(schedule, now);
       const durationMinutes = Math.max(1, Math.round((endTime - Date.now()) / 60000));
-      const domains = schedule.domains && schedule.domains.length ? schedule.domains : store.get('blocklist');
+      const mode = schedule.mode === 'allow' ? 'allow' : 'block';
+      const defaultList = mode === 'allow' ? store.get('allowlist') : store.get('blocklist');
+      const domains = schedule.domains && schedule.domains.length ? schedule.domains : defaultList;
 
       try {
         await this.start({
           domains,
+          apps: schedule.apps,
           durationMinutes,
           hard: !!schedule.hard,
+          mode,
           source: 'schedule',
           scheduleId: schedule.id,
         });
@@ -193,12 +254,21 @@ class SessionEngine extends EventEmitter {
     }
 
     try {
-      await hostsBlocker.applyBlock(session.domains);
+      if (session.mode === 'allow') {
+        proxyBlocker.setAllowlist(session.domains);
+        proxyBlocker.startProxyServer();
+        session.proxyContext = await systemProxy.enable(proxyBlocker.PROXY_PORT);
+        store.set('activeSession', session);
+      } else {
+        await hostsBlocker.applyBlock(session.domains);
+      }
     } catch (_) {
-      // If we can't get elevation on launch, the hosts file may already
-      // still contain the block from before the restart, so this is
-      // non-fatal; the session state itself is preserved either way.
+      // If we can't re-assert on launch (e.g. no active network service
+      // found yet), the previous state may already still be in effect, so
+      // this is non-fatal; the session record itself is preserved either way.
     }
+
+    this._startAppEnforcement(session.apps);
   }
 
   startTicking() {
