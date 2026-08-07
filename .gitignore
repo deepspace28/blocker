@@ -3,3 +3,8 @@ dist/
 out/
 *.log
 .DS_Store
+
+# Packed extension and its private signing key — never commit these
+extension.crx
+extension.pem
+*.pem
