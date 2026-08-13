@@ -123,3 +123,14 @@ for (const size of [256, 32, 16]) {
   fs.writeFileSync(path.join(outDir, name), png);
   console.log('wrote', name);
 }
+
+const extIconsDir = path.join(__dirname, '..', 'extension', 'icons');
+if (!fs.existsSync(extIconsDir)) fs.mkdirSync(extIconsDir, { recursive: true });
+
+for (const size of [128, 48, 16]) {
+  const pixels = drawIcon(size);
+  const png = encodePNG(size, size, pixels);
+  const name = `icon${size}.png`;
+  fs.writeFileSync(path.join(extIconsDir, name), png);
+  console.log('wrote extension/icons/' + name);
+}

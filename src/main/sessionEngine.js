@@ -1,22 +1,35 @@
 const { EventEmitter } = require('events');
 const crypto = require('crypto');
 const store = require('./store');
-const hostsBlocker = require('./hostsBlocker');
+const appBlocker = require('./appBlocker');
 
 const TICK_MS = 15000;
+const APP_ENFORCE_MS = 4000;
 
+// Actual site-blocking enforcement lives in the browser extension (see
+// extension/), which polls this app's local status API and redirects
+// blocked navigations to its own block page. This engine just owns the
+// session's state (start/end/mode/domains/hard-mode) and native app
+// killing, which needs no admin permission and no browser involvement.
 class SessionEngine extends EventEmitter {
   constructor() {
     super();
     this._timer = null;
+    this._appTimer = null;
   }
 
   getState() {
+    // Required lazily: statusServer reads the store too, and pulling it in
+    // at module load would make the two files circular.
+    const statusServer = require('./statusServer');
     return {
       activeSession: store.get('activeSession'),
       blocklist: store.get('blocklist'),
+      allowlist: store.get('allowlist'),
+      appBlocklist: store.get('appBlocklist'),
       schedules: store.get('schedules'),
       history: store.get('history'),
+      extensionConnected: statusServer.isExtensionConnected(),
     };
   }
 
@@ -27,7 +40,11 @@ class SessionEngine extends EventEmitter {
   /**
    * Start a focus session.
    * @param {object} opts
-   * @param {string[]} opts.domains
+   * @param {'block'|'allow'} [opts.mode] 'block' = block the given/blocklist
+   *   domains; 'allow' = "Lock the Internet" — block everything except the
+   *   given/allowlist domains.
+   * @param {string[]} [opts.domains]
+   * @param {string[]} [opts.apps] native app process names to also kill
    * @param {number} opts.durationMinutes
    * @param {boolean} opts.hard
    * @param {'manual'|'schedule'} [opts.source]
@@ -38,7 +55,12 @@ class SessionEngine extends EventEmitter {
     if (existing) {
       throw new Error('A focus session is already active.');
     }
-    const domains = opts.domains && opts.domains.length ? opts.domains : store.get('blocklist');
+
+    const mode = opts.mode === 'allow' ? 'allow' : 'block';
+    const defaultList = mode === 'allow' ? store.get('allowlist') : store.get('blocklist');
+    const domains = opts.domains && opts.domains.length ? opts.domains : defaultList;
+    const apps = opts.apps && opts.apps.length ? opts.apps : store.get('appBlocklist');
+
     const startTime = Date.now();
     const endTime = startTime + Math.max(1, opts.durationMinutes) * 60 * 1000;
 
@@ -49,11 +71,13 @@ class SessionEngine extends EventEmitter {
       startTime,
       endTime,
       hard: !!opts.hard,
+      mode,
       domains,
+      apps,
     };
 
-    await hostsBlocker.applyBlock(domains);
     store.set('activeSession', session);
+    this._startAppEnforcement(session.apps);
     this.emitState();
     return session;
   }
@@ -74,7 +98,7 @@ class SessionEngine extends EventEmitter {
   }
 
   async _endSession(session, { endedEarly }) {
-    await hostsBlocker.removeBlock();
+    this._stopAppEnforcement();
     store.set('activeSession', null);
 
     const history = store.get('history');
@@ -84,7 +108,9 @@ class SessionEngine extends EventEmitter {
       endTime: Date.now(),
       plannedEndTime: session.endTime,
       hard: session.hard,
+      mode: session.mode,
       domains: session.domains,
+      apps: session.apps,
       endedEarly,
       source: session.source,
     });
@@ -100,6 +126,20 @@ class SessionEngine extends EventEmitter {
     }
 
     this.emitState();
+  }
+
+  _startAppEnforcement(apps) {
+    this._stopAppEnforcement();
+    if (!apps || !apps.length) return;
+    appBlocker.enforce(apps).catch(() => {});
+    this._appTimer = setInterval(() => {
+      appBlocker.enforce(apps).catch(() => {});
+    }, APP_ENFORCE_MS);
+  }
+
+  _stopAppEnforcement() {
+    if (this._appTimer) clearInterval(this._appTimer);
+    this._appTimer = null;
   }
 
   _windowKey(schedule, now) {
@@ -150,13 +190,17 @@ class SessionEngine extends EventEmitter {
 
       const endTime = this._scheduleEndTimestamp(schedule, now);
       const durationMinutes = Math.max(1, Math.round((endTime - Date.now()) / 60000));
-      const domains = schedule.domains && schedule.domains.length ? schedule.domains : store.get('blocklist');
+      const mode = schedule.mode === 'allow' ? 'allow' : 'block';
+      const defaultList = mode === 'allow' ? store.get('allowlist') : store.get('blocklist');
+      const domains = schedule.domains && schedule.domains.length ? schedule.domains : defaultList;
 
       try {
         await this.start({
           domains,
+          apps: schedule.apps,
           durationMinutes,
           hard: !!schedule.hard,
+          mode,
           source: 'schedule',
           scheduleId: schedule.id,
         });
@@ -169,36 +213,20 @@ class SessionEngine extends EventEmitter {
 
   /**
    * Called once at app launch. If a session was active when the app last
-   * closed (or the machine restarted), re-assert the block and keep the
-   * countdown going — this is what makes hard mode survive a restart.
+   * closed (or the machine restarted), resume it — the browser extension
+   * will pick the still-active session back up on its next status poll,
+   * which is what makes hard mode survive a restart.
    */
   async restoreOnLaunch() {
     const session = store.get('activeSession');
-    if (!session) {
-      // Defensive: if hosts file still has our managed block but we have no
-      // record of an active session (e.g. store was cleared), clean it up.
-      if (hostsBlocker.isCurrentlyBlocked()) {
-        try {
-          await hostsBlocker.removeBlock();
-        } catch (_) {
-          /* ignore */
-        }
-      }
-      return;
-    }
+    if (!session) return;
 
     if (Date.now() >= session.endTime) {
       await this._endSession(session, { endedEarly: false });
       return;
     }
 
-    try {
-      await hostsBlocker.applyBlock(session.domains);
-    } catch (_) {
-      // If we can't get elevation on launch, the hosts file may already
-      // still contain the block from before the restart, so this is
-      // non-fatal; the session state itself is preserved either way.
-    }
+    this._startAppEnforcement(session.apps);
   }
 
   startTicking() {

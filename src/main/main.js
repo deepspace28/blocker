@@ -1,7 +1,17 @@
 const { app, BrowserWindow, Tray, Menu, ipcMain, nativeImage, dialog } = require('electron');
 const path = require('path');
+const crypto = require('crypto');
 const store = require('./store');
 const sessionEngine = require('./sessionEngine');
+const presetBlocklists = require('./presetBlocklists');
+const statusServer = require('./statusServer');
+const crx = require('./crx');
+const extensionPacker = require('./extensionPacker');
+const managedInstall = require('./managedInstall');
+
+function cleanDomain(raw) {
+  return String(raw).trim().toLowerCase().replace(/^https?:\/\//, '').replace(/\/.*$/, '');
+}
 
 let mainWindow = null;
 let tray = null;
@@ -86,7 +96,7 @@ function registerIpcHandlers() {
 
   ipcMain.handle('blocklist:add', (_e, domain) => {
     const list = store.get('blocklist');
-    const clean = String(domain).trim().toLowerCase().replace(/^https?:\/\//, '').replace(/\/.*$/, '');
+    const clean = cleanDomain(domain);
     if (clean && !list.includes(clean)) {
       list.push(clean);
       store.set('blocklist', list);
@@ -97,6 +107,56 @@ function registerIpcHandlers() {
 
   ipcMain.handle('blocklist:remove', (_e, domain) => {
     const list = store.get('blocklist').filter((d) => d !== domain);
+    store.set('blocklist', list);
+    sessionEngine.emitState();
+    return list;
+  });
+
+  ipcMain.handle('allowlist:add', (_e, domain) => {
+    const list = store.get('allowlist');
+    const clean = cleanDomain(domain);
+    if (clean && !list.includes(clean)) {
+      list.push(clean);
+      store.set('allowlist', list);
+      sessionEngine.emitState();
+    }
+    return store.get('allowlist');
+  });
+
+  ipcMain.handle('allowlist:remove', (_e, domain) => {
+    const list = store.get('allowlist').filter((d) => d !== domain);
+    store.set('allowlist', list);
+    sessionEngine.emitState();
+    return list;
+  });
+
+  ipcMain.handle('appBlocklist:add', (_e, appName) => {
+    const list = store.get('appBlocklist');
+    const clean = String(appName).trim();
+    if (clean && !list.includes(clean)) {
+      list.push(clean);
+      store.set('appBlocklist', list);
+      sessionEngine.emitState();
+    }
+    return store.get('appBlocklist');
+  });
+
+  ipcMain.handle('appBlocklist:remove', (_e, appName) => {
+    const list = store.get('appBlocklist').filter((a) => a !== appName);
+    store.set('appBlocklist', list);
+    sessionEngine.emitState();
+    return list;
+  });
+
+  ipcMain.handle('presets:list', () => presetBlocklists);
+
+  ipcMain.handle('presets:apply', (_e, categoryName) => {
+    const domains = presetBlocklists[categoryName];
+    if (!domains) return store.get('blocklist');
+    const list = store.get('blocklist');
+    for (const d of domains) {
+      if (!list.includes(d)) list.push(d);
+    }
     store.set('blocklist', list);
     sessionEngine.emitState();
     return list;
@@ -113,14 +173,16 @@ function registerIpcHandlers() {
   ipcMain.handle('schedule:add', (_e, schedule) => {
     const schedules = store.get('schedules');
     schedules.push({
-      id: require('crypto').randomUUID(),
+      id: crypto.randomUUID(),
       name: schedule.name || 'Untitled schedule',
       days: schedule.days || [],
       start: schedule.start,
       end: schedule.end,
       enabled: schedule.enabled !== false,
       hard: !!schedule.hard,
+      mode: schedule.mode === 'allow' ? 'allow' : 'block',
       domains: schedule.domains || null,
+      apps: schedule.apps || null,
       lastWindowKey: null,
       skippedWindowKey: null,
     });
@@ -146,19 +208,88 @@ function registerIpcHandlers() {
     sessionEngine.emitState();
     return schedules;
   });
+
+  // --- automatic (managed) extension install ---
+
+  ipcMain.handle('setup:info', async () => {
+    const extensionId = crx.extensionId(app);
+    return {
+      extensionId,
+      browsers: extensionPacker.findBrowsers().map((b) => b.name),
+      policyInstalled: await managedInstall.isInstalled(extensionId),
+      extensionConnected: statusServer.isExtensionConnected(),
+      launchAtLogin: app.getLoginItemSettings().openAtLogin,
+    };
+  });
+
+  ipcMain.handle('setup:install', async () => {
+    const extensionId = crx.extensionId(app);
+    // Pack first: if this fails there's no point prompting for admin.
+    const { packedBy } = await extensionPacker.packExtension(app);
+    prepareManagedInstall();
+    const browsers = await managedInstall.install(extensionId);
+    // Start at login too, so blocking is in force without the user
+    // remembering to open the app.
+    app.setLoginItemSettings({ openAtLogin: true, openAsHidden: true });
+    return { extensionId, packedBy, browsers };
+  });
+
+  ipcMain.handle('setup:uninstall', async () => {
+    const extensionId = crx.extensionId(app);
+    const browsers = await managedInstall.uninstall(extensionId);
+    app.setLoginItemSettings({ openAtLogin: false });
+    return { browsers };
+  });
+
+  ipcMain.handle('setup:setLaunchAtLogin', (_e, enabled) => {
+    app.setLoginItemSettings({ openAtLogin: !!enabled, openAsHidden: true });
+    return app.getLoginItemSettings().openAtLogin;
+  });
+}
+
+/** Tell the status server where the packed .crx lives so the browser's
+ *  policy engine can fetch it. Safe to call before the crx exists — the
+ *  endpoint 404s until it's built. */
+function prepareManagedInstall() {
+  try {
+    statusServer.setManagedInstallContext({
+      crxPath: crx.crxPath(app),
+      extensionId: crx.extensionId(app),
+      version: extensionPacker.extensionVersion(app),
+    });
+  } catch (err) {
+    // Missing extension source in a broken install; the Setup tab will
+    // surface the real error when the user tries to install.
+  }
 }
 
 app.whenReady().then(async () => {
   registerIpcHandlers();
   createWindow();
   createTray();
+  prepareManagedInstall();
+  statusServer.start();
 
   await sessionEngine.restoreOnLaunch();
-  sessionEngine.on('state', (state) => {
+
+  const pushState = () => {
     if (mainWindow && !mainWindow.isDestroyed()) {
-      mainWindow.webContents.send('state:update', state);
+      mainWindow.webContents.send('state:update', sessionEngine.getState());
     }
+  };
+
+  sessionEngine.on('state', () => {
+    // Release any long-polling extension immediately, so a session start or
+    // stop reaches the browser in milliseconds rather than on the next poll.
+    statusServer.notifyChanged();
+    pushState();
   });
+
+  // Surface extension connect/disconnect in the UI, so "nothing is being
+  // blocked because the extension isn't installed" is visible rather than
+  // a silent no-op.
+  statusServer.on('connection', pushState);
+
   sessionEngine.startTicking();
 
   app.on('activate', () => {
