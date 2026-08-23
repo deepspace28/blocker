@@ -1,0 +1,143 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<title>Pace</title>
+<style>
+  :root { color-scheme: light dark; }
+  * { box-sizing: border-box; }
+  html, body { height: 100%; margin: 0; }
+  body {
+    background:
+      radial-gradient(1200px 600px at 50% -10%, rgba(255,255,255,0.16), transparent 60%),
+      linear-gradient(160deg, #2a1f07 0%, #4a3410 45%, #7a5716 100%);
+    color: #ffffff;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    overflow: hidden;
+  }
+
+  .wrap {
+    text-align: center;
+    padding: 32px 24px;
+    max-width: 520px;
+    animation: rise 0.6s cubic-bezier(0.2, 0.8, 0.2, 1) both;
+  }
+
+  .eyebrow {
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 1.8px;
+    color: rgba(255, 255, 255, 0.6);
+    margin-bottom: 18px;
+  }
+
+  .dial { position: relative; width: 148px; height: 148px; margin: 0 auto 26px; }
+  .dial svg { width: 148px; height: 148px; transform: rotate(-90deg); }
+  .dial-track { fill: none; stroke: rgba(255, 255, 255, 0.16); stroke-width: 6; }
+  .dial-fill {
+    fill: none;
+    stroke: #f0b429;
+    stroke-width: 6;
+    stroke-linecap: round;
+    transition: stroke-dashoffset 0.1s linear;
+  }
+  .dial-center {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 44px;
+    font-weight: 700;
+    font-variant-numeric: tabular-nums;
+  }
+
+  h1 {
+    font-size: clamp(21px, 3.4vw, 28px);
+    font-weight: 700;
+    margin: 0;
+    letter-spacing: -0.3px;
+    text-wrap: balance;
+  }
+  .host { color: #f6cf6b; }
+
+  .sub {
+    margin-top: 12px;
+    font-size: 14px;
+    line-height: 1.6;
+    color: rgba(255, 255, 255, 0.76);
+  }
+
+  .actions { margin-top: 30px; display: flex; flex-direction: column; gap: 10px; align-items: stretch; }
+
+  button {
+    font: inherit;
+    border-radius: 12px;
+    cursor: pointer;
+    padding: 13px 20px;
+    border: 1px solid transparent;
+    transition: background 0.15s ease, border-color 0.15s ease, opacity 0.15s ease;
+  }
+  .back-btn {
+    background: #ffffff;
+    color: #3a2a08;
+    font-weight: 650;
+    font-size: 15px;
+  }
+  .back-btn:hover { background: rgba(255, 255, 255, 0.88); }
+
+  .go-btn {
+    background: transparent;
+    border-color: rgba(255, 255, 255, 0.24);
+    color: rgba(255, 255, 255, 0.82);
+    font-size: 13.5px;
+  }
+  .go-btn:hover:not(:disabled) { border-color: rgba(255, 255, 255, 0.5); }
+  .go-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+
+  .tally {
+    margin-top: 24px;
+    font-size: 12px;
+    color: rgba(255, 255, 255, 0.5);
+    min-height: 16px;
+  }
+
+  @keyframes rise {
+    from { opacity: 0; transform: translateY(14px); }
+    to   { opacity: 1; transform: translateY(0); }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .wrap { animation: none; }
+    .dial-fill { transition: none; }
+  }
+</style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="eyebrow">Pace</div>
+
+    <div class="dial">
+      <svg viewBox="0 0 148 148" aria-hidden="true">
+        <circle class="dial-track" cx="74" cy="74" r="66" />
+        <circle class="dial-fill" id="dial-fill" cx="74" cy="74" r="66" />
+      </svg>
+      <div class="dial-center" id="count">–</div>
+    </div>
+
+    <h1>Take a breath before <span class="host" id="host">this site</span></h1>
+    <div class="sub" id="sub">You put this site behind a pause. It's still here in a few seconds if you really want it.</div>
+
+    <div class="actions">
+      <button class="back-btn" id="back-btn">Not now — take me back</button>
+      <button class="go-btn" id="go-btn" disabled>Continue anyway</button>
+    </div>
+
+    <div class="tally" id="tally"></div>
+  </div>
+
+  <script src="pace.js"></script>
+</body>
+</html>

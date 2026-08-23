@@ -2,12 +2,13 @@
 
 A personal distraction blocker for your desktop, inspired by Freedom. Block distracting
 websites and apps for a set duration, invert it into an allowlist with "Lock the Internet,"
-set recurring schedules, and use hard mode when you don't trust yourself with an "off" switch.
+set recurring schedules, slow yourself down with Pace instead of blocking outright, and use hard
+mode when you don't trust yourself with an "off" switch.
 
 ## Two pieces
 
 - **The desktop app** (this repo's `src/`) — your control panel: blocklist, allowlist, blocked
-  apps, sessions, schedules, stats. No admin/root permission is ever required to run it or use
+  apps, sessions, schedules, Pace, stats. No admin/root permission is ever required to run it or use
   it. It also force-closes any native apps you've blocked (e.g. Discord, Steam), which likewise
   needs no elevation.
 - **The browser extension** (`extension/`) — actually enforces website blocking, inside whichever
@@ -75,6 +76,11 @@ blocking, but the extension stays user-removable, so hard mode is weaker.
   short list of sites you allow (docs, your work tools, etc.).
 - **App blocking** — force-close (and keep closed) native apps like Discord, Steam, or a game,
   during any session, regardless of mode.
+- **Pace** — friction instead of a wall, for the sites you don't want to ban outright.
+  A paced site opens a countdown screen first; sit it out and you can continue, which buys
+  a few minutes before the pause comes back. The way out is the loud button and continuing
+  is the quiet one, deliberately. Runs whether or not a session is going, and FocusLock
+  counts how often you turn back.
 - **Focus sessions** — start a timed session (e.g. 25 minutes, 2 hours) in either mode.
 - **Hard mode** — once a hard-mode session starts, it can't be stopped early, even if you quit
   or restart the app. As long as the FocusLock app is running in the background (it minimizes to
@@ -106,6 +112,28 @@ If the extension can't reach the status API (e.g. the FocusLock app isn't runnin
 whatever rules were already in place rather than clearing them — so a brief app hiccup doesn't
 silently lift a block.
 
+## How Pace works
+
+Both layers above have a second, softer outcome: a paced site is redirected to `pace.html`
+instead of `blocked.html`, carrying the URL you asked for so the screen can send you on
+afterwards. Sitting out the countdown grants a **pass** for that domain — held in the
+extension's session storage, so it survives the service worker being suspended and is gone
+when you close the browser.
+
+Three things take a site out of Pace's hands, in this order:
+
+1. **A hard block wins.** If the running session blocks the domain, you get the block page,
+   not a "continue anyway" button. Blocklist rules are also a higher DNR priority than pace
+   rules, so overlapping entries can't produce an ambiguous match.
+2. **A live pass.** Rules for that domain are removed the moment the pass is granted, and
+   the delay screen waits for that before navigating — otherwise it would bounce straight
+   back to itself.
+3. **"Lock the Internet".** Everything unlisted is already blocked, and the allowlist is
+   allowed precisely because you chose it, so Pace steps aside entirely.
+
+Expiry is decided at navigation time against the clock, not by waiting for rules to be
+rebuilt, so a pass stops working the second it runs out.
+
 **App blocking** periodically lists running processes (`tasklist`/`ps`) and force-kills any whose
 executable name matches an entry in your blocked-apps list — checked every few seconds, so a
 relaunch gets closed again almost immediately.
@@ -120,7 +148,6 @@ adversary.
 
 - Cross-device sync / mobile apps — would need a hosted backend and account system.
 - Firefox/Safari extension builds.
-- Freedom's "Pace" soft-friction delay screen.
 
 ## Running it
 
@@ -130,6 +157,17 @@ npm start
 ```
 
 Then install the browser extension (see above) so blocking actually takes effect.
+
+## Tests
+
+```bash
+npm test
+```
+
+Node's built-in runner, no dependencies. The extension's decision logic is loaded into a
+sandbox with a stubbed `chrome`, so blocking and Pace can be tested without a browser —
+including the two bugs end-to-end testing turned up (the first navigation after a session
+started used to load the real site; already-open tabs were never blocked).
 
 ## Building installers
 
@@ -146,7 +184,7 @@ src/
   main/         Electron main process
     main.js             app lifecycle, window, tray, IPC handlers
     store.js             persisted JSON store (electron-store)
-    statusServer.js       localhost API: /status, /events long-poll, heartbeat, .crx serving
+    statusServer.js       localhost API: /status, /events long-poll, /pace/*, heartbeat, .crx serving
     crx.js                signing key + Chrome extension ID derivation
     extensionPacker.js    packs the extension into a signed .crx
     managedInstall.js     writes/removes the managed browser policy (the one admin prompt)
@@ -159,6 +197,8 @@ extension/      Chromium browser extension (Manifest V3)
   manifest.json
   background.js          long-polls statusServer; DNR rules + tab-level enforcement
   blocked.html/.js       the "You are free from your loop" block page, with countdown
+  pace.html/.js          the Pace delay screen: countdown, turn back, or continue
   popup.html/.js         toolbar popup: session state and connection status
+test/                    node:test suites for the blocking and Pace decisions
 scripts/generate-icons.js   generates the placeholder app/tray/extension icons
 ```

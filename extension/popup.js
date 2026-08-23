@@ -16,11 +16,19 @@ function renderDisconnected() {
   `;
 }
 
+function paceRow(status) {
+  const pace = status.pace || {};
+  if (!pace.enabled) return '';
+  const count = (pace.domains || []).length;
+  return `<div class="row"><span>Pace · ${count} site${count === 1 ? '' : 's'}</span><span>${pace.delaySeconds}s</span></div>`;
+}
+
 function renderStatus(status) {
   if (!status.active) {
     content.innerHTML = `
       <div class="state off">No session</div>
       <div class="detail">Connected to the FocusLock app. Start a session there to begin blocking.</div>
+      ${paceRow(status)}
     `;
     return;
   }
@@ -38,6 +46,7 @@ function renderStatus(status) {
     <div class="countdown" id="countdown">${formatRemaining(status.endTime - Date.now())}</div>
     <div class="detail">${listLabel}${status.hard ? ' · hard mode' : ''}</div>
     <div class="row"><span>Enforced in this browser</span><span>✓</span></div>
+    ${paceRow(status)}
   `;
 
   const el = document.getElementById('countdown');
