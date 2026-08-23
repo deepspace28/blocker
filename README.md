@@ -58,7 +58,12 @@ browser profile installs the extension by itself, registering as `EXTERNAL_POLIC
   browser fetches it from the app's localhost server. After that the browser caches it.
 - Administrator rights are needed for that one prompt, because machine-wide browser policy lives
   in a protected location (`HKLM` on Windows, `/etc/...` on Linux, `/Library/Managed Preferences`
-  on macOS). Nothing after setup ever asks again.
+  on macOS). Nothing after setup ever asks again — and that is enforced, not just intended:
+  if the policy is already in place, **Setup skips elevation entirely** and only rebuilds the
+  extension. FocusLock also re-packs the extension by itself at startup whenever it notices it
+  ships a newer one, so an app update reaches the browser without a second prompt.
+- The "extension not detected" banner means your *browser* isn't open, not that something needs
+  installing. It says so once the policy is in place, rather than pointing you back at Setup.
 - Firefox and Safari aren't supported — different extension and policy systems.
 
 ### Manual install (alternative)
@@ -169,11 +174,23 @@ sandbox with a stubbed `chrome`, so blocking and Pace can be tested without a br
 including the two bugs end-to-end testing turned up (the first navigation after a session
 started used to load the real site; already-open tabs were never blocked).
 
-## Building installers
+## Installing it as a real app
 
 ```bash
-npm run dist
+npm run dist    # → dist/FocusLock Setup <version>.exe
+npm run pack    # → dist/win-unpacked/, no installer (useful offline)
 ```
+
+The Windows installer is **one-click and per-user**: it lands in
+`%LOCALAPPDATA%\Programs\focuslock`, adds Start-menu and desktop shortcuts and an entry in
+Add/Remove Programs, and needs no administrator rights. It's unsigned, so SmartScreen warns
+once — *More info → Run anyway*. Uninstalling leaves your data and the extension signing key
+alone, so reinstalling keeps the same extension ID and your existing browser policy still
+matches.
+
+Installed or run from source, FocusLock holds a single-instance lock: clicking the icon while
+it's already in the tray raises the existing window instead of starting a second copy that
+would fight the first for port 38219.
 
 Uses `electron-builder`; see `package.json`'s `build` field for per-platform targets.
 

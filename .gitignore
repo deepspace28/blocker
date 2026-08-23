@@ -8,3 +8,6 @@ out/
 extension.crx
 extension.pem
 *.pem
+
+# Local tool scratch (browse daemon audit log)
+.gstack/

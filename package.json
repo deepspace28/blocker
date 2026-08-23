@@ -9,9 +9,10 @@
     "start": "electron .",
     "dev": "electron . --dev",
     "test": "node --test",
+    "pack": "electron-builder --dir",
     "dist": "electron-builder"
   },
-  "author": "",
+  "author": "Jishnav",
   "license": "MIT",
   "devDependencies": {
     "electron": "^32.2.0",
@@ -32,7 +33,17 @@
       "category": "public.app-category.productivity"
     },
     "win": {
-      "target": "nsis"
+      "target": "nsis",
+      "icon": "assets/icon.png"
+    },
+    "nsis": {
+      "oneClick": true,
+      "perMachine": false,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "FocusLock",
+      "runAfterFinish": true,
+      "deleteAppDataOnUninstall": false
     },
     "linux": {
       "target": "AppImage"

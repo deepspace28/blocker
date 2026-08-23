@@ -31,8 +31,8 @@
     </header>
 
     <div class="banner hidden" id="ext-banner">
-      <strong>Website blocking isn't active yet.</strong>
-      <span>Run the one-time setup and FocusLock installs itself into your browser automatically.</span>
+      <strong id="banner-title">Website blocking isn't active yet.</strong>
+      <span id="banner-body">Run the one-time setup and FocusLock installs itself into your browser automatically.</span>
       <button class="banner-btn" id="banner-setup-btn">Go to Setup</button>
     </div>
 
@@ -243,7 +243,8 @@
         </div>
 
         <button class="primary-btn" id="setup-install-btn">Set up automatic blocking</button>
-        <p class="hint" id="setup-msg">You'll see one administrator prompt. Nothing else to do.</p>
+        <p class="hint" id="setup-cost">You'll see one administrator prompt. Nothing else to do.</p>
+        <p class="hint" id="setup-msg"></p>
 
         <h3>Reverse it</h3>
         <p class="hint">Removes the browser policy and stops FocusLock starting at login.

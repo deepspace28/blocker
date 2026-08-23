@@ -45,6 +45,18 @@ function renderConnection() {
     : "No browser extension is talking to FocusLock, so websites won't be blocked.";
 
   banner.classList.toggle('hidden', connected);
+
+  // The extension only reports in while a browser is actually open. Once the
+  // policy is installed there is nothing left to set up, so don't send the
+  // user back to a button whose only remaining effect is an admin prompt.
+  const installed = setupInfo && setupInfo.policyInstalled;
+  $('#banner-title').textContent = installed
+    ? 'Your browser isn’t running FocusLock right now.'
+    : "Website blocking isn't active yet.";
+  $('#banner-body').textContent = installed
+    ? 'Nothing to install — the extension is already forced into your browser. Open it (or fully quit and reopen it) and this clears by itself.'
+    : 'Run the one-time setup and FocusLock installs itself into your browser automatically.';
+  $('#banner-setup-btn').classList.toggle('hidden', !!installed);
 }
 
 // ---------- focus tab ----------
@@ -396,8 +408,14 @@ async function refreshSetup() {
 
   $('#setup-login').checked = !!setupInfo.launchAtLogin;
   $('#setup-install-btn').textContent = setupInfo.policyInstalled
-    ? 'Re-run setup'
+    ? 'Refresh browser install'
     : 'Set up automatic blocking';
+  $('#setup-cost').textContent = setupInfo.policyInstalled
+    ? 'Already installed — this rebuilds the extension and asks for nothing.'
+    : "You'll see one administrator prompt. Nothing else to do.";
+
+  // The banner's wording depends on whether the policy is in place.
+  if (state) renderConnection();
 }
 
 $('#banner-setup-btn').addEventListener('click', () => switchTab('setup'));
@@ -406,11 +424,15 @@ $('#setup-install-btn').addEventListener('click', async () => {
   const btn = $('#setup-install-btn');
   const msg = $('#setup-msg');
   btn.disabled = true;
-  msg.textContent = 'Packaging the extension and asking for administrator approval…';
+  msg.textContent = setupInfo && setupInfo.policyInstalled
+    ? 'Rebuilding the extension…'
+    : 'Packaging the extension and asking for administrator approval…';
   try {
     const result = await window.focuslock.runSetup();
-    msg.innerHTML = `Done — configured for <strong>${result.browsers.join(', ')}</strong>. ` +
-      'Fully quit and reopen your browser, and FocusLock will be there automatically.';
+    msg.textContent = result.alreadyInstalled
+      ? 'Extension rebuilt and served. No administrator prompt was needed — your browser policy was already in place. Restart your browser to pick up the new version.'
+      : `Done — configured for ${result.browsers.join(', ')}. ` +
+        'Fully quit and reopen your browser, and FocusLock will be there automatically.';
     await refreshSetup();
   } catch (err) {
     msg.textContent = err.message || 'Setup failed.';

@@ -37,6 +37,9 @@ const store = new Store({
     paceEvents: [],
     settings: {
       launchAtLogin: false,
+      // Version of the extension the packed .crx was built from. Lets the
+      // app notice its own update and re-pack without an admin prompt.
+      packedExtensionVersion: null,
     },
   },
 });
