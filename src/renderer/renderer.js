@@ -166,6 +166,40 @@ function renderAllowlist() {
   });
 }
 
+function renderPace() {
+  const pace = state.pace || { enabled: false, delaySeconds: 15, passMinutes: 5, domains: [] };
+  const usingBlocklist = !pace.domains.length;
+
+  $('#pace-enabled').checked = !!pace.enabled;
+  // Don't yank a value out from under someone mid-edit.
+  for (const [sel, value] of [['#pace-delay', pace.delaySeconds], ['#pace-pass', pace.passMinutes]]) {
+    const el = $(sel);
+    if (document.activeElement !== el) el.value = value;
+  }
+
+  $('#pace-fallback-hint').textContent = usingBlocklist
+    ? `Empty, so Pace uses your blocklist (${state.blocklist.length} site${state.blocklist.length === 1 ? '' : 's'}) — those sites get a pause outside sessions and a hard block during one.`
+    : 'Subdomains are included automatically.';
+
+  renderList('#pace-ul', pace.domains, 'No sites of its own — using your blocklist.', async (d) => {
+    state.pace = await window.focuslock.removePaceDomain(d);
+    renderPace();
+  });
+}
+
+async function savePaceSettings() {
+  state.pace = await window.focuslock.updatePace({
+    enabled: $('#pace-enabled').checked,
+    delaySeconds: Number($('#pace-delay').value),
+    passMinutes: Number($('#pace-pass').value),
+  });
+  renderPace();
+}
+
+$('#pace-enabled').addEventListener('change', savePaceSettings);
+$('#pace-delay').addEventListener('change', savePaceSettings);
+$('#pace-pass').addEventListener('change', savePaceSettings);
+
 function renderApps() {
   renderList('#apps-ul', state.appBlocklist, 'No apps yet.', async (a) => {
     state.appBlocklist = await window.focuslock.removeBlockedApp(a);
@@ -274,6 +308,16 @@ function renderStats() {
     [`${(totalMs / 3600000).toFixed(1)}h`, 'Time protected'],
     [streak, 'Day streak'],
   ];
+
+  // Pace only earns space once it has something to say.
+  const paceEvents = state.paceEvents || [];
+  if (paceEvents.length) {
+    const today = new Date().toDateString();
+    const pausedToday = paceEvents.filter((e) => new Date(e.time).toDateString() === today).length;
+    const turnedBack = paceEvents.filter((e) => e.action === 'back').length;
+    cards.push([pausedToday, 'Paced today']);
+    cards.push([`${Math.round((turnedBack / paceEvents.length) * 100)}%`, 'Turned back']);
+  }
   for (const [value, label] of cards) {
     const div = document.createElement('div');
     div.className = 'stat-card';
@@ -399,6 +443,7 @@ function renderAll() {
   renderHome();
   renderBlocklist();
   renderAllowlist();
+  renderPace();
   renderApps();
   renderPresets();
   renderSchedules();
@@ -463,6 +508,8 @@ wireAdd('#allow-input', '#add-allow-btn',
   async (v) => { state.allowlist = await window.focuslock.addAllowlistDomain(v); }, renderAllowlist);
 wireAdd('#app-input', '#add-app-btn',
   async (v) => { state.appBlocklist = await window.focuslock.addBlockedApp(v); }, renderApps);
+wireAdd('#pace-input', '#add-pace-btn',
+  async (v) => { state.pace = await window.focuslock.addPaceDomain(v); }, renderPace);
 
 $('#add-schedule-btn').addEventListener('click', async () => {
   const days = $$('#days-row input[type="checkbox"]:checked').map((el) => Number(el.value));

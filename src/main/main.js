@@ -13,6 +13,10 @@ function cleanDomain(raw) {
   return String(raw).trim().toLowerCase().replace(/^https?:\/\//, '').replace(/\/.*$/, '');
 }
 
+function clamp(value, min, max) {
+  return Math.min(max, Math.max(min, value));
+}
+
 let mainWindow = null;
 let tray = null;
 let isQuitting = false;
@@ -146,6 +150,37 @@ function registerIpcHandlers() {
     store.set('appBlocklist', list);
     sessionEngine.emitState();
     return list;
+  });
+
+  // --- pace (soft friction) ---
+
+  ipcMain.handle('pace:update', (_e, patch) => {
+    const pace = { ...store.get('pace'), ...patch };
+    pace.enabled = !!pace.enabled;
+    pace.delaySeconds = clamp(Number(pace.delaySeconds) || 15, 3, 120);
+    pace.passMinutes = clamp(Number(pace.passMinutes) || 5, 1, 120);
+    store.set('pace', pace);
+    sessionEngine.emitState();
+    return store.get('pace');
+  });
+
+  ipcMain.handle('pace:add', (_e, domain) => {
+    const pace = store.get('pace');
+    const clean = cleanDomain(domain);
+    if (clean && !pace.domains.includes(clean)) {
+      pace.domains.push(clean);
+      store.set('pace', pace);
+      sessionEngine.emitState();
+    }
+    return store.get('pace');
+  });
+
+  ipcMain.handle('pace:remove', (_e, domain) => {
+    const pace = store.get('pace');
+    pace.domains = pace.domains.filter((d) => d !== domain);
+    store.set('pace', pace);
+    sessionEngine.emitState();
+    return store.get('pace');
   });
 
   ipcMain.handle('presets:list', () => presetBlocklists);
@@ -289,6 +324,12 @@ app.whenReady().then(async () => {
   // blocked because the extension isn't installed" is visible rather than
   // a silent no-op.
   statusServer.on('connection', pushState);
+
+  // Pace decisions come in from the browser, not the UI. Record them and
+  // refresh the window only — no version bump, so browsers don't rebuild
+  // their blocking rules every time you hit a delay screen.
+  statusServer.on('paceEvent', (evt) => sessionEngine.recordPaceEvent(evt));
+  sessionEngine.on('paceStats', pushState);
 
   sessionEngine.startTicking();
 

@@ -17,6 +17,10 @@ contextBridge.exposeInMainWorld('focuslock', {
   addBlockedApp: (appName) => ipcRenderer.invoke('appBlocklist:add', appName),
   removeBlockedApp: (appName) => ipcRenderer.invoke('appBlocklist:remove', appName),
 
+  updatePace: (patch) => ipcRenderer.invoke('pace:update', patch),
+  addPaceDomain: (domain) => ipcRenderer.invoke('pace:add', domain),
+  removePaceDomain: (domain) => ipcRenderer.invoke('pace:remove', domain),
+
   getPresets: () => ipcRenderer.invoke('presets:list'),
   applyPreset: (categoryName) => ipcRenderer.invoke('presets:apply', categoryName),
 
