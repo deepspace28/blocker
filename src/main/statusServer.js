@@ -257,6 +257,14 @@ class StatusServer extends EventEmitter {
       res.end();
     });
 
+    // Without a handler, a busy port raises an unhandled 'error' event and
+    // takes the whole app down. Surfacing it keeps FocusLock running — the
+    // UI already shows "Extension not detected" when the API is unreachable.
+    this._server.on('error', (err) => {
+      this.emit('serverError', err);
+      console.error('[FocusLock] status server error:', err.message);
+    });
+
     this._server.listen(PORT, '127.0.0.1');
 
     // Watch for the extension going away (browser closed, extension
