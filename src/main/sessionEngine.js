@@ -61,8 +61,16 @@ class SessionEngine extends EventEmitter {
     const domains = opts.domains && opts.domains.length ? opts.domains : defaultList;
     const apps = opts.apps && opts.apps.length ? opts.apps : store.get('appBlocklist');
 
+    // A non-numeric duration used to sail through Math.max() as NaN, which
+    // made endTime NaN — and `Date.now() >= NaN` is false forever, so the
+    // session could never expire on its own.
+    const durationMinutes = Number(opts.durationMinutes);
+    if (!Number.isFinite(durationMinutes) || durationMinutes <= 0) {
+      throw new Error('Session duration must be a positive number of minutes.');
+    }
+
     const startTime = Date.now();
-    const endTime = startTime + Math.max(1, opts.durationMinutes) * 60 * 1000;
+    const endTime = startTime + Math.max(1, Math.round(durationMinutes)) * 60 * 1000;
 
     const session = {
       id: crypto.randomUUID(),
@@ -220,6 +228,13 @@ class SessionEngine extends EventEmitter {
   async restoreOnLaunch() {
     const session = store.get('activeSession');
     if (!session) return;
+
+    // Heal a session persisted with a corrupt endTime by an older build;
+    // otherwise it would stay "active" forever across every restart.
+    if (!Number.isFinite(session.endTime)) {
+      await this._endSession(session, { endedEarly: true });
+      return;
+    }
 
     if (Date.now() >= session.endTime) {
       await this._endSession(session, { endedEarly: false });
