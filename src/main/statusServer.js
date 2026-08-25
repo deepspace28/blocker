@@ -209,10 +209,28 @@ class StatusServer extends EventEmitter {
   stop() {
     if (this._connectionTimer) clearInterval(this._connectionTimer);
     this._connectionTimer = null;
-    for (const waiter of this._waiters) clearTimeout(waiter.timer);
+
+    // Answer every held long-poll before closing. Dropping the waiters
+    // without replying left the extension blocked on a socket that would
+    // never produce a response — it sat there until its own timeout instead
+    // of falling back to short polling, so it stopped tracking session state
+    // exactly when the app was going away.
+    const waiters = this._waiters;
     this._waiters = [];
-    if (this._server) this._server.close();
+    for (const waiter of waiters) {
+      clearTimeout(waiter.timer);
+      this._sendJson(waiter.res, this.buildPayload());
+    }
+
+    const server = this._server;
     this._server = null;
+    if (!server) return;
+    server.close();
+    // Those sockets are idle the moment their response flushes, but would
+    // otherwise sit out keepAliveTimeout still holding the port.
+    setImmediate(() => {
+      if (server.closeIdleConnections) server.closeIdleConnections();
+    });
   }
 }
 
