@@ -150,18 +150,41 @@ class SessionEngine extends EventEmitter {
     this._appTimer = null;
   }
 
+  _minutes(hhmm) {
+    const [h, m] = String(hhmm).split(':').map(Number);
+    return h * 60 + m;
+  }
+
+  /** True for a window that wraps past midnight, e.g. 22:00 - 06:00. */
+  _isOvernight(schedule) {
+    return this._minutes(schedule.end) <= this._minutes(schedule.start);
+  }
+
+  /**
+   * The calendar day the currently-relevant window *began* on. For an
+   * overnight window, everything after midnight still belongs to the window
+   * that opened the previous evening — keying on today's date instead would
+   * mint a brand new key at midnight.
+   */
+  _windowStartDate(schedule, now) {
+    const date = new Date(now);
+    const nowMinutes = now.getHours() * 60 + now.getMinutes();
+    if (this._isOvernight(schedule) && nowMinutes < this._minutes(schedule.start)) {
+      date.setDate(date.getDate() - 1);
+    }
+    return date;
+  }
+
   _windowKey(schedule, now) {
-    return `${now.toDateString()}|${schedule.id}|${schedule.start}`;
+    return `${this._windowStartDate(schedule, now).toDateString()}|${schedule.id}|${schedule.start}`;
   }
 
   _scheduleMatchesNow(schedule, now) {
     if (!schedule.enabled) return false;
     const day = now.getDay();
     if (!schedule.days.includes(day)) return false;
-    const [startH, startM] = schedule.start.split(':').map(Number);
-    const [endH, endM] = schedule.end.split(':').map(Number);
-    const startMinutes = startH * 60 + startM;
-    const endMinutes = endH * 60 + endM;
+    const startMinutes = this._minutes(schedule.start);
+    const endMinutes = this._minutes(schedule.end);
     const nowMinutes = now.getHours() * 60 + now.getMinutes();
     if (endMinutes > startMinutes) {
       return nowMinutes >= startMinutes && nowMinutes < endMinutes;
