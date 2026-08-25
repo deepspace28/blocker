@@ -18,6 +18,10 @@ const store = require('./store');
 const PORT = 38219;
 const HEARTBEAT_TIMEOUT_MS = 90000;
 const LONG_POLL_TIMEOUT_MS = 25000;
+// Browser-extension pages only. Extension service workers holding a
+// host permission for 127.0.0.1 bypass CORS entirely, so this is really
+// just for the popup and block pages.
+const EXTENSION_ORIGIN = /^(chrome|moz|safari-web)-extension:\/\//i;
 
 class StatusServer extends EventEmitter {
   constructor() {
@@ -142,7 +146,22 @@ class StatusServer extends EventEmitter {
     if (this._server) return;
 
     this._server = http.createServer((req, res) => {
-      res.setHeader('Access-Control-Allow-Origin', '*');
+      // The wildcard here let *any* page the user browsed read this endpoint,
+      // which exposes the whole blocklist plus whether a hard-mode session is
+      // running — and let those pages occupy long-poll slots. Only the
+      // extension needs cross-origin access; ordinary web origins are
+      // refused outright so they can't sit in the waiter list either.
+      const origin = req.headers.origin;
+      if (origin) {
+        if (!EXTENSION_ORIGIN.test(origin)) {
+          res.writeHead(403);
+          res.end();
+          return;
+        }
+        res.setHeader('Access-Control-Allow-Origin', origin);
+      }
+      res.setHeader('Vary', 'Origin');
+
       const url = new URL(req.url, `http://127.0.0.1:${PORT}`);
 
       if (url.searchParams.get('client') === 'extension') {
