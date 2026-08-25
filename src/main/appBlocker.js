@@ -3,6 +3,13 @@
 // app can't stay open (or gets closed again within a few seconds if
 // relaunched) during a session.
 const { exec } = require('child_process');
+const path = require('path');
+
+// A blocklist entry shorter than this is only ever matched exactly. "steam"
+// should still catch "steamwebhelper", but letting a 2-3 character entry
+// extend to any process that merely starts with it is how you end up killing
+// half the machine.
+const MIN_PREFIX_MATCH_LEN = 4;
 
 function run(cmd) {
   return new Promise((resolve) => {
@@ -41,7 +48,26 @@ async function listProcesses() {
 }
 
 function baseName(name) {
-  return name.toLowerCase().replace(/\.exe$/, '').replace(/^.*\//, '');
+  // Strip the directory first (ps can report a full path, and Windows uses
+  // backslashes), then the extension — doing it the other way round left
+  // "C:\Apps\Discord.exe" as a full path that could never match anything.
+  return String(name)
+    .trim()
+    .toLowerCase()
+    .replace(/^.*[\\/]/, '')
+    .replace(/\.(exe|app)$/, '');
+}
+
+/** The name of the binary we are ourselves running as, so a blocklist entry
+ *  can never make FocusLock terminate its own helper processes and take the
+ *  enforcement loop down with them. */
+function selfName() {
+  return baseName(path.basename(process.execPath));
+}
+
+function nameMatches(procName, target) {
+  if (procName === target) return true;
+  return target.length >= MIN_PREFIX_MATCH_LEN && procName.startsWith(target);
 }
 
 async function killProcess(pid) {
@@ -63,10 +89,15 @@ async function enforce(blockedApps) {
 
   const processes = await listProcesses();
   const currentPid = process.pid;
+  const self = selfName();
   for (const proc of processes) {
     if (proc.pid === currentPid) continue;
     const name = baseName(proc.name);
-    const match = targets.some((t) => name === t || name.includes(t));
+    // Electron runs its GPU/renderer/utility children under this same
+    // executable name on different PIDs; skipping only our own PID left them
+    // killable.
+    if (name === self) continue;
+    const match = targets.some((t) => nameMatches(name, t));
     if (match) {
       try {
         await killProcess(proc.pid);
@@ -77,4 +108,4 @@ async function enforce(blockedApps) {
   }
 }
 
-module.exports = { enforce, listProcesses };
+module.exports = { enforce, listProcesses, baseName, nameMatches };
