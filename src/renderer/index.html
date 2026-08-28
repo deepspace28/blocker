@@ -22,6 +22,7 @@
         <button class="tab-btn active" data-tab="home">Focus</button>
         <button class="tab-btn" data-tab="blocklist">Blocklist</button>
         <button class="tab-btn" data-tab="allowlist">Allowlist</button>
+        <button class="tab-btn" data-tab="pace">Pace</button>
         <button class="tab-btn" data-tab="apps">Apps</button>
         <button class="tab-btn" data-tab="schedules">Schedules</button>
         <button class="tab-btn" data-tab="stats">Stats</button>
@@ -30,8 +31,8 @@
     </header>
 
     <div class="banner hidden" id="ext-banner">
-      <strong>Website blocking isn't active yet.</strong>
-      <span>Run the one-time setup and FocusLock installs itself into your browser automatically.</span>
+      <strong id="banner-title">Website blocking isn't active yet.</strong>
+      <span id="banner-body">Run the one-time setup and FocusLock installs itself into your browser automatically.</span>
       <button class="banner-btn" id="banner-setup-btn">Go to Setup</button>
     </div>
 
@@ -124,6 +125,41 @@
         <ul class="list" id="allowlist-ul"></ul>
       </section>
 
+      <!-- PACE -->
+      <section id="tab-pace" class="tab-panel">
+        <h2>Pace</h2>
+        <p class="hint">Friction instead of a wall. Paced sites aren't blocked — you get a
+        countdown screen first, and sitting it out buys a few minutes before the pause comes
+        back. It runs all the time, session or not. Anything your session is actively blocking
+        stays blocked; Pace only handles the rest.</p>
+
+        <div class="card">
+          <label class="hard-toggle pace-toggle">
+            <input type="checkbox" id="pace-enabled" />
+            <span>
+              <strong>Pace these sites</strong>
+              <em>Off by default. Nothing is paced until you turn this on.</em>
+            </span>
+          </label>
+          <div class="inline-field">
+            <input type="number" id="pace-delay" min="3" max="120" value="15" />
+            <span>seconds before you can continue</span>
+          </div>
+          <div class="inline-field" style="margin-top: 8px;">
+            <input type="number" id="pace-pass" min="1" max="120" value="5" />
+            <span>minutes of access once you do</span>
+          </div>
+        </div>
+
+        <h3>Paced sites</h3>
+        <p class="hint" id="pace-fallback-hint"></p>
+        <div class="add-row">
+          <input type="text" id="pace-input" placeholder="e.g. youtube.com" />
+          <button id="add-pace-btn" class="secondary-btn">Add</button>
+        </div>
+        <ul class="list" id="pace-ul"></ul>
+      </section>
+
       <!-- APPS -->
       <section id="tab-apps" class="tab-panel">
         <h2>Blocked apps</h2>
@@ -207,7 +243,8 @@
         </div>
 
         <button class="primary-btn" id="setup-install-btn">Set up automatic blocking</button>
-        <p class="hint" id="setup-msg">You'll see one administrator prompt. Nothing else to do.</p>
+        <p class="hint" id="setup-cost">You'll see one administrator prompt. Nothing else to do.</p>
+        <p class="hint" id="setup-msg"></p>
 
         <h3>Reverse it</h3>
         <p class="hint">Removes the browser policy and stops FocusLock starting at login.

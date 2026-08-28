@@ -45,6 +45,18 @@ function renderConnection() {
     : "No browser extension is talking to FocusLock, so websites won't be blocked.";
 
   banner.classList.toggle('hidden', connected);
+
+  // The extension only reports in while a browser is actually open. Once the
+  // policy is installed there is nothing left to set up, so don't send the
+  // user back to a button whose only remaining effect is an admin prompt.
+  const installed = setupInfo && setupInfo.policyInstalled;
+  $('#banner-title').textContent = installed
+    ? 'Your browser isn’t running FocusLock right now.'
+    : "Website blocking isn't active yet.";
+  $('#banner-body').textContent = installed
+    ? 'Nothing to install — the extension is already forced into your browser. Open it (or fully quit and reopen it) and this clears by itself.'
+    : 'Run the one-time setup and FocusLock installs itself into your browser automatically.';
+  $('#banner-setup-btn').classList.toggle('hidden', !!installed);
 }
 
 // ---------- focus tab ----------
@@ -166,6 +178,40 @@ function renderAllowlist() {
   });
 }
 
+function renderPace() {
+  const pace = state.pace || { enabled: false, delaySeconds: 15, passMinutes: 5, domains: [] };
+  const usingBlocklist = !pace.domains.length;
+
+  $('#pace-enabled').checked = !!pace.enabled;
+  // Don't yank a value out from under someone mid-edit.
+  for (const [sel, value] of [['#pace-delay', pace.delaySeconds], ['#pace-pass', pace.passMinutes]]) {
+    const el = $(sel);
+    if (document.activeElement !== el) el.value = value;
+  }
+
+  $('#pace-fallback-hint').textContent = usingBlocklist
+    ? `Empty, so Pace uses your blocklist (${state.blocklist.length} site${state.blocklist.length === 1 ? '' : 's'}) — those sites get a pause outside sessions and a hard block during one.`
+    : 'Subdomains are included automatically.';
+
+  renderList('#pace-ul', pace.domains, 'No sites of its own — using your blocklist.', async (d) => {
+    state.pace = await window.focuslock.removePaceDomain(d);
+    renderPace();
+  });
+}
+
+async function savePaceSettings() {
+  state.pace = await window.focuslock.updatePace({
+    enabled: $('#pace-enabled').checked,
+    delaySeconds: Number($('#pace-delay').value),
+    passMinutes: Number($('#pace-pass').value),
+  });
+  renderPace();
+}
+
+$('#pace-enabled').addEventListener('change', savePaceSettings);
+$('#pace-delay').addEventListener('change', savePaceSettings);
+$('#pace-pass').addEventListener('change', savePaceSettings);
+
 function renderApps() {
   renderList('#apps-ul', state.appBlocklist, 'No apps yet.', async (a) => {
     state.appBlocklist = await window.focuslock.removeBlockedApp(a);
@@ -274,6 +320,16 @@ function renderStats() {
     [`${(totalMs / 3600000).toFixed(1)}h`, 'Time protected'],
     [streak, 'Day streak'],
   ];
+
+  // Pace only earns space once it has something to say.
+  const paceEvents = state.paceEvents || [];
+  if (paceEvents.length) {
+    const today = new Date().toDateString();
+    const pausedToday = paceEvents.filter((e) => new Date(e.time).toDateString() === today).length;
+    const turnedBack = paceEvents.filter((e) => e.action === 'back').length;
+    cards.push([pausedToday, 'Paced today']);
+    cards.push([`${Math.round((turnedBack / paceEvents.length) * 100)}%`, 'Turned back']);
+  }
   for (const [value, label] of cards) {
     const div = document.createElement('div');
     div.className = 'stat-card';
@@ -352,8 +408,14 @@ async function refreshSetup() {
 
   $('#setup-login').checked = !!setupInfo.launchAtLogin;
   $('#setup-install-btn').textContent = setupInfo.policyInstalled
-    ? 'Re-run setup'
+    ? 'Refresh browser install'
     : 'Set up automatic blocking';
+  $('#setup-cost').textContent = setupInfo.policyInstalled
+    ? 'Already installed — this rebuilds the extension and asks for nothing.'
+    : "You'll see one administrator prompt. Nothing else to do.";
+
+  // The banner's wording depends on whether the policy is in place.
+  if (state) renderConnection();
 }
 
 $('#banner-setup-btn').addEventListener('click', () => switchTab('setup'));
@@ -362,11 +424,15 @@ $('#setup-install-btn').addEventListener('click', async () => {
   const btn = $('#setup-install-btn');
   const msg = $('#setup-msg');
   btn.disabled = true;
-  msg.textContent = 'Packaging the extension and asking for administrator approval…';
+  msg.textContent = setupInfo && setupInfo.policyInstalled
+    ? 'Rebuilding the extension…'
+    : 'Packaging the extension and asking for administrator approval…';
   try {
     const result = await window.focuslock.runSetup();
-    msg.innerHTML = `Done — configured for <strong>${result.browsers.join(', ')}</strong>. ` +
-      'Fully quit and reopen your browser, and FocusLock will be there automatically.';
+    msg.textContent = result.alreadyInstalled
+      ? 'Extension rebuilt and served. No administrator prompt was needed — your browser policy was already in place. Restart your browser to pick up the new version.'
+      : `Done — configured for ${result.browsers.join(', ')}. ` +
+        'Fully quit and reopen your browser, and FocusLock will be there automatically.';
     await refreshSetup();
   } catch (err) {
     msg.textContent = err.message || 'Setup failed.';
@@ -399,6 +465,7 @@ function renderAll() {
   renderHome();
   renderBlocklist();
   renderAllowlist();
+  renderPace();
   renderApps();
   renderPresets();
   renderSchedules();
@@ -463,6 +530,8 @@ wireAdd('#allow-input', '#add-allow-btn',
   async (v) => { state.allowlist = await window.focuslock.addAllowlistDomain(v); }, renderAllowlist);
 wireAdd('#app-input', '#add-app-btn',
   async (v) => { state.appBlocklist = await window.focuslock.addBlockedApp(v); }, renderApps);
+wireAdd('#pace-input', '#add-pace-btn',
+  async (v) => { state.pace = await window.focuslock.addPaceDomain(v); }, renderPace);
 
 $('#add-schedule-btn').addEventListener('click', async () => {
   const days = $$('#days-row input[type="checkbox"]:checked').map((el) => Number(el.value));

@@ -29,8 +29,25 @@ class SessionEngine extends EventEmitter {
       appBlocklist: store.get('appBlocklist'),
       schedules: store.get('schedules'),
       history: store.get('history'),
+      pace: store.get('pace'),
+      paceEvents: store.get('paceEvents'),
       extensionConnected: statusServer.isExtensionConnected(),
     };
+  }
+
+  /**
+   * Record one Pace decision reported by the extension: you either sat
+   * through the delay and went on, or you backed out. Deliberately does not
+   * go through emitState() — a pace decision changes no enforcement state,
+   * and bumping the status version would make every browser rebuild its
+   * rules for a stat.
+   * @param {{ time: number, host: string, action: 'through'|'back' }} evt
+   */
+  recordPaceEvent(evt) {
+    const events = store.get('paceEvents');
+    events.unshift(evt);
+    store.set('paceEvents', events.slice(0, 500));
+    this.emit('paceStats', evt);
   }
 
   emitState() {
