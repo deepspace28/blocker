@@ -165,18 +165,25 @@ class SessionEngine extends EventEmitter {
 
   _scheduleMatchesNow(schedule, now) {
     if (!schedule.enabled) return false;
-    const day = now.getDay();
-    if (!schedule.days.includes(day)) return false;
     const [startH, startM] = schedule.start.split(':').map(Number);
     const [endH, endM] = schedule.end.split(':').map(Number);
     const startMinutes = startH * 60 + startM;
     const endMinutes = endH * 60 + endM;
     const nowMinutes = now.getHours() * 60 + now.getMinutes();
     if (endMinutes > startMinutes) {
+      const day = now.getDay();
+      if (!schedule.days.includes(day)) return false;
       return nowMinutes >= startMinutes && nowMinutes < endMinutes;
     }
     // overnight window (e.g. 22:00 - 06:00)
-    return nowMinutes >= startMinutes || nowMinutes < endMinutes;
+    if (nowMinutes >= startMinutes) {
+      return schedule.days.includes(now.getDay());
+    }
+    if (nowMinutes >= endMinutes) {
+      return false;
+    }
+    const previousDay = (now.getDay() + 6) % 7;
+    return schedule.days.includes(previousDay);
   }
 
   _scheduleEndTimestamp(schedule, now) {
