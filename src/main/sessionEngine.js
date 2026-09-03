@@ -198,16 +198,22 @@ class SessionEngine extends EventEmitter {
 
   _scheduleMatchesNow(schedule, now) {
     if (!schedule.enabled) return false;
-    const day = now.getDay();
-    if (!schedule.days.includes(day)) return false;
     const startMinutes = this._minutes(schedule.start);
     const endMinutes = this._minutes(schedule.end);
     const nowMinutes = now.getHours() * 60 + now.getMinutes();
     if (endMinutes > startMinutes) {
-      return nowMinutes >= startMinutes && nowMinutes < endMinutes;
+      return schedule.days.includes(now.getDay()) && nowMinutes >= startMinutes && nowMinutes < endMinutes;
     }
     // overnight window (e.g. 22:00 - 06:00)
-    return nowMinutes >= startMinutes || nowMinutes < endMinutes;
+    if (nowMinutes >= startMinutes) {
+      return schedule.days.includes(now.getDay());
+    }
+    if (nowMinutes >= endMinutes) {
+      return false;
+    }
+    // after midnight the window still belongs to the evening that opened it
+    const previousDay = (now.getDay() + 6) % 7;
+    return schedule.days.includes(previousDay);
   }
 
   _scheduleEndTimestamp(schedule, now) {
