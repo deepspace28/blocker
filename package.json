@@ -1,7 +1,7 @@
 {
   "name": "focuslock",
   "productName": "FocusLock",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "A personal distraction blocker, like Freedom: block sites, schedule sessions, hard mode, and track your stats.",
   "main": "src/main/main.js",
   "private": true,
